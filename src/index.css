@@ -1,0 +1,57 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-brand: 99 102 241;
+  }
+
+  * {
+    @apply border-white/5;
+  }
+
+  body {
+    @apply bg-surface text-white font-sans antialiased;
+    background-image: 
+      radial-gradient(ellipse at 20% 50%, rgba(99,102,241,0.05) 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 20%, rgba(139,92,246,0.05) 0%, transparent 50%);
+  }
+
+  ::-webkit-scrollbar {
+    @apply w-1.5;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-white/10 rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-white/20;
+  }
+}
+
+@layer components {
+  .glass {
+    @apply bg-surface-2/80 backdrop-blur-sm border border-white/5;
+  }
+  .glass-hover {
+    @apply hover:bg-surface-3/80 transition-colors duration-150;
+  }
+  .btn-primary {
+    @apply bg-brand-600 hover:bg-brand-500 text-white px-4 py-2 rounded-lg font-medium transition-all duration-150 active:scale-95 text-sm;
+  }
+  .btn-ghost {
+    @apply text-white/60 hover:text-white hover:bg-white/5 px-3 py-2 rounded-lg transition-all duration-150 text-sm;
+  }
+  .input {
+    @apply bg-surface-3 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/30 focus:outline-none focus:border-brand-500/50 focus:ring-1 focus:ring-brand-500/30 transition-all duration-150 w-full;
+  }
+  .card {
+    @apply bg-surface-1 border border-white/5 rounded-xl;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium;
+  }
+}
