@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS public.organizations (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
   name TEXT NOT NULL,
   slug TEXT UNIQUE NOT NULL,
+  org_code TEXT UNIQUE NOT NULL DEFAULT (substring(md5(random()::text || clock_timestamp()::text), 1, 8)),
   logo_url TEXT,
   created_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
@@ -57,10 +58,27 @@ CREATE TABLE IF NOT EXISTS public.memberships (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
   organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE NOT NULL,
   user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
-  role TEXT DEFAULT 'member' CHECK (role IN ('admin', 'member')),
-  invited_email TEXT,
+  role TEXT DEFAULT 'employee' CHECK (role IN ('admin', 'employee')),
   joined_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(organization_id, user_id)
+);
+
+-- =============================================
+-- INVITATIONS (pending org invites)
+-- =============================================
+CREATE TABLE IF NOT EXISTS public.invitations (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE NOT NULL,
+  email TEXT NOT NULL,
+  role TEXT DEFAULT 'employee' CHECK (role IN ('admin', 'employee')),
+  invited_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+  token TEXT UNIQUE NOT NULL,
+  accepted BOOLEAN DEFAULT FALSE,
+  accepted_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+  accepted_at TIMESTAMPTZ,
+  expires_at TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '7 days'),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(organization_id, email)
 );
 
 -- =============================================
@@ -195,19 +213,23 @@ CREATE TABLE IF NOT EXISTS public.pomodoro_sessions (
 -- =============================================
 -- INDEXES (performance)
 -- =============================================
-CREATE INDEX IF NOT EXISTS idx_memberships_user ON public.memberships(user_id);
+CREATE INDEX IF NOT EXISTS idx_memberships_user_org ON public.memberships(user_id, organization_id);
 CREATE INDEX IF NOT EXISTS idx_memberships_org ON public.memberships(organization_id);
-CREATE INDEX IF NOT EXISTS idx_projects_org ON public.projects(organization_id);
+CREATE INDEX IF NOT EXISTS idx_invitations_org ON public.invitations(organization_id);
+CREATE INDEX IF NOT EXISTS idx_invitations_email ON public.invitations(email);
+CREATE INDEX IF NOT EXISTS idx_invitations_token ON public.invitations(token);
+CREATE INDEX IF NOT EXISTS idx_invitations_accepted ON public.invitations(accepted, expires_at);
+CREATE INDEX IF NOT EXISTS idx_projects_org_created ON public.projects(organization_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_boards_project ON public.boards(project_id);
-CREATE INDEX IF NOT EXISTS idx_tasks_board ON public.tasks(board_id);
-CREATE INDEX IF NOT EXISTS idx_tasks_project ON public.tasks(project_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_board_project ON public.tasks(board_id, project_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_assignee ON public.tasks(assignee_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_created ON public.tasks(created_at);
 CREATE INDEX IF NOT EXISTS idx_comments_task ON public.comments(task_id);
 CREATE INDEX IF NOT EXISTS idx_crm_contacts_org ON public.crm_contacts(organization_id);
-CREATE INDEX IF NOT EXISTS idx_messages_org ON public.messages(organization_id);
+CREATE INDEX IF NOT EXISTS idx_messages_org_created ON public.messages(organization_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_messages_project ON public.messages(project_id);
-CREATE INDEX IF NOT EXISTS idx_events_org ON public.events(organization_id);
-CREATE INDEX IF NOT EXISTS idx_pomodoro_user ON public.pomodoro_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_events_org_date ON public.events(organization_id, start_date);
+CREATE INDEX IF NOT EXISTS idx_pomodoro_user_created ON public.pomodoro_sessions(user_id, created_at);
 
 -- =============================================
 -- ROW LEVEL SECURITY (RLS)
@@ -217,6 +239,7 @@ CREATE INDEX IF NOT EXISTS idx_pomodoro_user ON public.pomodoro_sessions(user_id
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.organizations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.memberships ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.invitations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.boards ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
@@ -245,6 +268,54 @@ RETURNS BOOLEAN AS $$
   );
 $$ LANGUAGE sql SECURITY DEFINER STABLE;
 
+-- Drop existing policies to avoid conflicts
+DROP POLICY IF EXISTS "Users can view their own profile" ON public.profiles;
+DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
+DROP POLICY IF EXISTS "Org members can view each other's profiles" ON public.profiles;
+DROP POLICY IF EXISTS "Org members can view organization" ON public.organizations;
+DROP POLICY IF EXISTS "Org creators can view own organization" ON public.organizations;
+DROP POLICY IF EXISTS "Authenticated users can create org" ON public.organizations;
+DROP POLICY IF EXISTS "Org admins can update" ON public.organizations;
+DROP POLICY IF EXISTS "Members can view memberships in their org" ON public.memberships;
+DROP POLICY IF EXISTS "Org creators can insert first membership" ON public.memberships;
+DROP POLICY IF EXISTS "Admins can insert memberships" ON public.memberships;
+DROP POLICY IF EXISTS "Admins can update memberships" ON public.memberships;
+DROP POLICY IF EXISTS "Admins can delete memberships" ON public.memberships;
+DROP POLICY IF EXISTS "Admins can view invitations" ON public.invitations;
+DROP POLICY IF EXISTS "Users can view invitations sent to them" ON public.invitations;
+DROP POLICY IF EXISTS "Admins can create invitations" ON public.invitations;
+DROP POLICY IF EXISTS "Admins can update invitations" ON public.invitations;
+DROP POLICY IF EXISTS "Admins can delete invitations" ON public.invitations;
+DROP POLICY IF EXISTS "Org members can view projects" ON public.projects;
+DROP POLICY IF EXISTS "Org members can create projects" ON public.projects;
+DROP POLICY IF EXISTS "Org members can update projects" ON public.projects;
+DROP POLICY IF EXISTS "Org admins can delete projects" ON public.projects;
+DROP POLICY IF EXISTS "Project members can view boards" ON public.boards;
+DROP POLICY IF EXISTS "Project members can manage boards" ON public.boards;
+DROP POLICY IF EXISTS "Project members can view tasks" ON public.tasks;
+DROP POLICY IF EXISTS "Project members can create tasks" ON public.tasks;
+DROP POLICY IF EXISTS "Project members can update tasks" ON public.tasks;
+DROP POLICY IF EXISTS "Task creator or admin can delete" ON public.tasks;
+DROP POLICY IF EXISTS "Task members can view comments" ON public.comments;
+DROP POLICY IF EXISTS "Task members can add comments" ON public.comments;
+DROP POLICY IF EXISTS "Comment owners can update" ON public.comments;
+DROP POLICY IF EXISTS "Comment owners can delete" ON public.comments;
+DROP POLICY IF EXISTS "Org members can view contacts" ON public.crm_contacts;
+DROP POLICY IF EXISTS "Org members can create contacts" ON public.crm_contacts;
+DROP POLICY IF EXISTS "Org members can update contacts" ON public.crm_contacts;
+DROP POLICY IF EXISTS "Org admins can delete contacts" ON public.crm_contacts;
+DROP POLICY IF EXISTS "Org members can view deals" ON public.deals;
+DROP POLICY IF EXISTS "Org members can manage deals" ON public.deals;
+DROP POLICY IF EXISTS "Org members can view messages" ON public.messages;
+DROP POLICY IF EXISTS "Org members can send messages" ON public.messages;
+DROP POLICY IF EXISTS "Org members can view events" ON public.events;
+DROP POLICY IF EXISTS "Org members can create events" ON public.events;
+DROP POLICY IF EXISTS "Event creators can update" ON public.events;
+DROP POLICY IF EXISTS "Event creators can delete" ON public.events;
+DROP POLICY IF EXISTS "Users can view own sessions" ON public.pomodoro_sessions;
+DROP POLICY IF EXISTS "Users can create own sessions" ON public.pomodoro_sessions;
+DROP POLICY IF EXISTS "Users can update own sessions" ON public.pomodoro_sessions;
+
 -- PROFILES policies
 CREATE POLICY "Users can view their own profile" ON public.profiles FOR SELECT USING (auth.uid() = id);
 CREATE POLICY "Users can update own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id);
@@ -271,6 +342,15 @@ CREATE POLICY "Org creators can insert first membership" ON public.memberships F
 CREATE POLICY "Admins can insert memberships" ON public.memberships FOR INSERT WITH CHECK (public.is_org_admin(organization_id));
 CREATE POLICY "Admins can update memberships" ON public.memberships FOR UPDATE USING (public.is_org_admin(organization_id));
 CREATE POLICY "Admins can delete memberships" ON public.memberships FOR DELETE USING (public.is_org_admin(organization_id));
+
+-- INVITATIONS policies
+CREATE POLICY "Admins can view invitations" ON public.invitations FOR SELECT USING (public.is_org_admin(organization_id));
+CREATE POLICY "Users can view invitations sent to them" ON public.invitations FOR SELECT USING (
+  email = (SELECT email FROM public.profiles WHERE id = auth.uid())
+);
+CREATE POLICY "Admins can create invitations" ON public.invitations FOR INSERT WITH CHECK (public.is_org_admin(organization_id));
+CREATE POLICY "Admins can update invitations" ON public.invitations FOR UPDATE USING (public.is_org_admin(organization_id));
+CREATE POLICY "Admins can delete invitations" ON public.invitations FOR DELETE USING (public.is_org_admin(organization_id));
 
 -- PROJECTS policies
 CREATE POLICY "Org members can view projects" ON public.projects FOR SELECT USING (public.is_org_member(organization_id));

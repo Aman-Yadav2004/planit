@@ -38,6 +38,7 @@ export interface Database {
           id: string
           name: string
           slug: string
+          org_code: string
           logo_url: string | null
           created_by: string | null
           created_at: string
@@ -46,6 +47,7 @@ export interface Database {
           id?: string
           name: string
           slug: string
+          org_code?: string
           logo_url?: string | null
           created_by?: string | null
           created_at?: string
@@ -54,6 +56,7 @@ export interface Database {
           id?: string
           name?: string
           slug?: string
+          org_code?: string
           logo_url?: string | null
           created_by?: string | null
           created_at?: string
@@ -65,25 +68,64 @@ export interface Database {
           id: string
           organization_id: string
           user_id: string
-          role: 'admin' | 'member'
-          invited_email: string | null
+          role: 'admin' | 'employee'
           joined_at: string
         }
         Insert: {
           id?: string
           organization_id: string
           user_id: string
-          role?: 'admin' | 'member'
-          invited_email?: string | null
+          role?: 'admin' | 'employee'
           joined_at?: string
         }
         Update: {
           id?: string
           organization_id?: string
           user_id?: string
-          role?: 'admin' | 'member'
-          invited_email?: string | null
+          role?: 'admin' | 'employee'
           joined_at?: string
+        }
+        Relationships: []
+      }
+      invitations: {
+        Row: {
+          id: string
+          organization_id: string
+          email: string
+          role: 'admin' | 'employee'
+          invited_by: string | null
+          token: string
+          accepted: boolean
+          accepted_by: string | null
+          accepted_at: string | null
+          expires_at: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          email: string
+          role?: 'admin' | 'employee'
+          invited_by?: string | null
+          token: string
+          accepted?: boolean
+          accepted_by?: string | null
+          accepted_at?: string | null
+          expires_at?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          email?: string
+          role?: 'admin' | 'employee'
+          invited_by?: string | null
+          token?: string
+          accepted?: boolean
+          accepted_by?: string | null
+          accepted_at?: string | null
+          expires_at?: string
+          created_at?: string
         }
         Relationships: []
       }
@@ -417,6 +459,7 @@ export interface Database {
 export type Profile = Database['public']['Tables']['profiles']['Row']
 export type Organization = Database['public']['Tables']['organizations']['Row']
 export type Membership = Database['public']['Tables']['memberships']['Row']
+export type Invitation = Database['public']['Tables']['invitations']['Row']
 export type Project = Database['public']['Tables']['projects']['Row']
 export type Board = Database['public']['Tables']['boards']['Row'] & { tasks?: Task[] }
 export type Task = Database['public']['Tables']['tasks']['Row'] & {

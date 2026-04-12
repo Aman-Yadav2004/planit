@@ -6,6 +6,7 @@ import type { Profile, Organization } from '../types/supabase'
 interface AuthState {
   user: Profile | null
   organization: Organization | null
+  organizations: Organization[]
   loading: boolean
   initialized: boolean
   hydrateFallbackUser: (authUser: User) => void
@@ -16,12 +17,16 @@ interface AuthState {
   signOut: () => Promise<void>
   fetchProfile: (userId: string) => Promise<{ error: string | null }>
   fetchOrganization: (userId: string) => Promise<{ error: string | null }>
+  fetchOrganizations: (userId: string) => Promise<{ error: string | null }>
+  switchOrganization: (orgId: string) => Promise<void>
+  joinByOrgCode: (orgCode: string) => Promise<{ error: string | null; orgId?: string }>
   initialize: () => Promise<void>
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   organization: null,
+  organizations: [],
   loading: false,
   initialized: false,
 
@@ -128,6 +133,65 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     return { error: null }
   },
 
+  fetchOrganizations: async (userId) => {
+    const { data, error } = await supabase
+      .from('memberships')
+      .select('organization_id, organizations(*)')
+      .eq('user_id', userId)
+    if (error) return { error: error.message }
+    const orgs = data?.map(m => m.organizations as unknown as Organization) || []
+    set({ organizations: orgs })
+    return { error: null }
+  },
+
+  switchOrganization: async (orgId) => {
+    const org = get().organizations.find(o => o.id === orgId)
+    if (org) {
+      set({ organization: org })
+    }
+  },
+
+  joinByOrgCode: async (orgCode) => {
+    const { user } = get()
+    if (!user) return { error: 'Not authenticated' }
+    
+    try {
+      // Find org by code
+      const { data: org, error: orgError } = await supabase
+        .from('organizations')
+        .select('*')
+        .eq('org_code', orgCode.toUpperCase())
+        .single()
+      
+      if (orgError || !org) return { error: 'Organization code not found' }
+      
+      // Check if already a member
+      const { data: existing } = await supabase
+        .from('memberships')
+        .select('id')
+        .eq('organization_id', org.id)
+        .eq('user_id', user.id)
+        .single()
+      
+      if (existing) return { error: 'You are already a member of this organization', orgId: org.id }
+      
+      // Create membership as employee
+      const { error: memberError } = await supabase
+        .from('memberships')
+        .insert({ organization_id: org.id, user_id: user.id, role: 'employee' })
+      
+      if (memberError) return { error: memberError.message }
+      
+      // Fetch updated organizations
+      await get().fetchOrganizations(user.id)
+      set({ organization: org })
+      
+      return { error: null, orgId: org.id }
+    } catch (e: any) {
+      return { error: e.message }
+    }
+  },
+
   initialize: async () => {
     const { data: { session } } = await supabase.auth.getSession()
     if (session?.user) {
@@ -135,18 +199,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       if (profileResult.error) {
         get().hydrateFallbackUser(session.user)
       }
+      await get().fetchOrganizations(session.user.id)
       await get().fetchOrganization(session.user.id)
     }
     set({ initialized: true })
 
     supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_OUT') {
-        set({ user: null, organization: null })
+        set({ user: null, organization: null, organizations: [] })
       } else if (session?.user) {
         const profileResult = await get().fetchProfile(session.user.id)
         if (profileResult.error) {
           get().hydrateFallbackUser(session.user)
         }
+        await get().fetchOrganizations(session.user.id)
         await get().fetchOrganization(session.user.id)
       }
     })

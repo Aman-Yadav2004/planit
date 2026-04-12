@@ -6,11 +6,13 @@ import { AuthPage } from './pages/AuthPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { ProjectsPage } from './pages/ProjectsPage'
 import { BoardPage } from './pages/BoardPage'
-import { CrmPage } from './pages/CrmPage'
+import { CrmPageNew } from './pages/CrmPageNew'
 import { ChatPage } from './pages/ChatPage'
 import { CalendarPage } from './pages/CalendarPage'
 import { PomodoroPage } from './pages/PomodoroPage'
 import { OnboardingPage } from './pages/OnboardingPage'
+import { ProfilePage } from './pages/ProfilePage'
+import { JoinOrgPage } from './pages/JoinOrgPage'
 import { LoadingScreen } from './components/ui/LoadingScreen'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -42,13 +44,19 @@ export default function App() {
         <Route path="/onboarding" element={
           <ProtectedRoute><OnboardingPage /></ProtectedRoute>
         } />
+        <Route path="/join-org/:orgId" element={
+          <ProtectedRoute><JoinOrgPage /></ProtectedRoute>
+        } />
+        <Route path="/profile" element={
+          <ProtectedRoute><ProfilePage /></ProtectedRoute>
+        } />
         <Route path="/" element={
           <OrgRoute><AppLayout /></OrgRoute>
         }>
           <Route index element={<DashboardPage />} />
           <Route path="projects" element={<ProjectsPage />} />
           <Route path="projects/:projectId" element={<BoardPage />} />
-          <Route path="crm" element={<CrmPage />} />
+          <Route path="crm" element={<CrmPageNew />} />
           <Route path="chat" element={<ChatPage />} />
           <Route path="calendar" element={<CalendarPage />} />
           <Route path="pomodoro" element={<PomodoroPage />} />
