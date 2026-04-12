@@ -109,7 +109,6 @@ function ContactForm({
             className="input min-h-[70px] resize-none"
             placeholder="Add any notes..."
           />
-          />
         </div>
       </div>
 
