@@ -380,7 +380,7 @@ export function CrmPageNew() {
         }}
       >
         <ContactForm
-          initial={editContact}
+          initial={editContact || undefined}
           onSave={editContact ? handleUpdate : handleCreate}
           onCancel={() => {
             setShowModal(false)

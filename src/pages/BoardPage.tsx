@@ -8,34 +8,42 @@ import { Plus, ArrowLeft, Loader2 } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 import { useProjectsStore } from '../store/projectsStore'
 import { BoardColumn } from '../components/tasks/BoardColumn'
+import { AssigneePicker, type AssigneeOption } from '../components/tasks/AssigneePicker'
 import { TaskCardOverlay } from '../components/tasks/TaskCard'
 import { TaskDetail } from '../components/tasks/TaskDetail'
 import { Modal } from '../components/ui/Modal'
 import { toast } from '../components/ui/Toast'
+import { supabase } from '../lib/supabase'
 import type { Task } from '../types/supabase'
 
 const DEFAULT_BOARDS = ['To Do', 'In Progress', 'Review', 'Done']
 
-function CreateTaskForm({ boardId, boards, onSave }: {
+const getTodayDateString = () => new Date().toISOString().split('T')[0]
+const isPastDueDate = (value: string) => {
+  const selectedDate = new Date(value)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  selectedDate.setHours(0, 0, 0, 0)
+  return selectedDate < today
+}
+
+function CreateTaskForm({ boardId, boards, assigneeOptions, onSave }: {
   boardId: string
   boards: { id: string; name: string }[]
+  assigneeOptions: AssigneeOption[]
   onSave: (data: Partial<Task>) => void
 }) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [priority, setPriority] = useState<Task['priority']>('medium')
   const [dueDate, setDueDate] = useState('')
-  const [assignedTo, setAssignedTo] = useState('')
+  const [assigneeId, setAssigneeId] = useState<string | null>(null)
   const [selectedBoardId, setSelectedBoardId] = useState(boardId)
   const [dueDateError, setDueDateError] = useState('')
 
   const handleDateChange = (date: string) => {
     if (date) {
-      const selectedDate = new Date(date)
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      
-      if (selectedDate < today) {
+      if (isPastDueDate(date)) {
         setDueDateError('Cannot set deadline to a past date')
         setDueDate('')
       } else {
@@ -77,19 +85,19 @@ function CreateTaskForm({ boardId, boards, onSave }: {
           {dueDateError && <p className="text-red-400 text-xs mt-1">{dueDateError}</p>}
         </div>
         <div>
-          <label className="block text-xs text-white/40 mb-1.5">Assign To</label>
-          <input 
-            type="text" 
-            value={assignedTo} 
-            onChange={e => setAssignedTo(e.target.value)} 
-            placeholder="Team member name or email"
-            className="input" 
-          />
-        </div>
           <label className="block text-xs text-white/40 mb-1.5">Column</label>
           <select value={selectedBoardId} onChange={e => setSelectedBoardId(e.target.value)} className="input">
             {boards.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
+        </div>
+        <div className="col-span-2">
+          <label className="block text-xs text-white/40 mb-1.5">Assign To</label>
+          <AssigneePicker
+            options={assigneeOptions}
+            selectedValue={assigneeId}
+            onChange={setAssigneeId}
+          />
+          <p className="text-xs text-white/30 mt-1.5">Pending invites appear in the list, but they can’t be assigned until they join the organization.</p>
         </div>
       </div>
       <div className="flex justify-end">
@@ -100,7 +108,7 @@ function CreateTaskForm({ boardId, boards, onSave }: {
             priority, 
             due_date: dueDate || undefined, 
             board_id: selectedBoardId,
-            assigned_to: assignedTo || undefined 
+            assignee_id: assigneeId || undefined
           })}
           disabled={!title.trim() || !!dueDateError}
           className="btn-primary"
@@ -114,13 +122,14 @@ function CreateTaskForm({ boardId, boards, onSave }: {
 
 export function BoardPage() {
   const { projectId } = useParams<{ projectId: string }>()
-  const { user } = useAuthStore()
+  const { user, organization } = useAuthStore()
   const { projects, boards, loading, fetchBoards, createBoard, updateBoard, deleteBoard, createTask, moveTask } = useProjectsStore()
   const [activeTask, setActiveTask] = useState<Task | null>(null)
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
   const [addingTask, setAddingTask] = useState<{ boardId: string } | null>(null)
   const [addingBoard, setAddingBoard] = useState(false)
   const [newBoardName, setNewBoardName] = useState('')
+  const [assigneeOptions, setAssigneeOptions] = useState<AssigneeOption[]>([])
 
   const project = projects.find(p => p.id === projectId)
 
@@ -139,6 +148,52 @@ export function BoardPage() {
       }
     })
   }, [projectId])
+
+  useEffect(() => {
+    if (!organization?.id) return
+
+    const loadAssigneeOptions = async () => {
+      const [membersResult, invitationsResult] = await Promise.all([
+        supabase
+          .from('memberships')
+          .select('id, user_id, role, profile:user_id(*)')
+          .eq('organization_id', organization.id),
+        supabase
+          .from('invitations')
+          .select('id, email, role, accepted')
+          .eq('organization_id', organization.id)
+          .eq('accepted', false),
+      ])
+
+      const memberOptions: AssigneeOption[] = (membersResult.data || [])
+        .map((membership: any) => {
+          const profile = Array.isArray(membership.profile) ? membership.profile[0] : membership.profile
+          if (!profile?.id) return null
+
+          return {
+            id: membership.id,
+            value: profile.id,
+            label: profile.full_name || profile.email,
+            secondary: `${profile.email} • ${membership.role}`,
+            status: 'member',
+          } satisfies AssigneeOption
+        })
+        .filter(Boolean) as AssigneeOption[]
+
+      const invitationOptions: AssigneeOption[] = (invitationsResult.data || []).map((invite: any) => ({
+        id: invite.id,
+        value: `invite:${invite.id}`,
+        label: invite.email,
+        secondary: `Invited • ${invite.role}`,
+        status: 'invited',
+        disabled: true,
+      }))
+
+      setAssigneeOptions([...memberOptions, ...invitationOptions])
+    }
+
+    loadAssigneeOptions()
+  }, [organization?.id])
 
   const handleDragStart = (event: DragStartEvent) => {
     if (event.active.data.current?.type === 'task') {
@@ -175,6 +230,10 @@ export function BoardPage() {
 
   const handleCreateTask = async (data: Partial<Task>) => {
     if (!user || !projectId || !addingTask) return
+    if (data.due_date && isPastDueDate(data.due_date)) {
+      toast.error('Cannot set deadline to a past date')
+      return
+    }
     const board = boards.find(b => b.id === (data.board_id || addingTask.boardId))
     const position = board?.tasks?.length || 0
     const task = await createTask({
@@ -184,7 +243,7 @@ export function BoardPage() {
       description: data.description || null,
       priority: data.priority || 'medium',
       status: 'todo',
-      assignee_id: null,
+      assignee_id: data.assignee_id || null,
       due_date: data.due_date || null,
       position,
       created_by: user.id,
@@ -307,6 +366,7 @@ export function BoardPage() {
           <CreateTaskForm
             boardId={addingTask.boardId}
             boards={boards.map(b => ({ id: b.id, name: b.name }))}
+            assigneeOptions={assigneeOptions}
             onSave={handleCreateTask}
           />
         )}

@@ -125,6 +125,22 @@ CREATE TABLE IF NOT EXISTS public.tasks (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE OR REPLACE FUNCTION public.validate_task_due_date()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.due_date IS NOT NULL AND NEW.due_date::date < CURRENT_DATE THEN
+    RAISE EXCEPTION 'Task due date cannot be in the past';
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS validate_task_due_date_trigger ON public.tasks;
+CREATE TRIGGER validate_task_due_date_trigger
+  BEFORE INSERT OR UPDATE ON public.tasks
+  FOR EACH ROW EXECUTE FUNCTION public.validate_task_due_date();
+
 -- =============================================
 -- COMMENTS
 -- =============================================

@@ -37,6 +37,9 @@ export function ProfilePage() {
   const [userRole, setUserRole] = useState<'admin' | 'employee' | null>(null)
   const [roleLoading, setRoleLoading] = useState(true)
 
+  const getMemberProfile = (membership: Membership & { profile?: Profile | Profile[] }) =>
+    Array.isArray(membership.profile) ? membership.profile[0] : membership.profile
+
   useEffect(() => {
     if (organization) {
       setRoleLoading(true)
@@ -61,7 +64,7 @@ export function ProfilePage() {
         .eq('organization_id', organization.id)
 
       if (error) throw error
-      setMembers(data || [])
+      setMembers((data || []) as any)
     } catch (error: any) {
       console.error('Members fetch error:', error.message)
     } finally {
@@ -171,7 +174,7 @@ export function ProfilePage() {
               inviteLink,
               orgName: organization.name,
               role: inviteRole,
-              invitedByName: user.user_metadata?.full_name || user.email,
+              invitedByName: user.full_name || user.email,
             }),
           }
         )
@@ -265,9 +268,9 @@ export function ProfilePage() {
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-4">
               <Avatar
-                src={profile?.avatar_url}
+                url={profile?.avatar_url}
                 name={profile?.full_name || profile?.email}
-                size={80}
+                size="lg"
               />
               <div>
                 <h1 className="text-3xl font-bold text-white">{profile?.full_name || 'User'}</h1>
@@ -362,26 +365,22 @@ export function ProfilePage() {
                       key={membership.id}
                       className="flex items-center justify-between p-3 bg-surface rounded-lg hover:bg-white/2 transition"
                     >
+                      {(() => {
+                        const memberProfile = getMemberProfile(membership as Membership & { profile?: Profile | Profile[] })
+
+                        return (
                       <div className="flex items-center gap-3 flex-1">
                         <Avatar
-                          src={
-                            membership.profile?.[0]?.avatar_url ||
-                            (membership.profile as any)?.avatar_url
-                          }
-                          name={
-                            membership.profile?.[0]?.full_name ||
-                            (membership.profile as any)?.full_name
-                          }
-                          size={40}
+                          url={memberProfile?.avatar_url}
+                          name={memberProfile?.full_name || memberProfile?.email}
+                          size="md"
                         />
                         <div className="flex-1">
                           <p className="text-white font-medium">
-                            {membership.profile?.[0]?.full_name ||
-                              (membership.profile as any)?.full_name ||
-                              'Unknown'}
+                            {memberProfile?.full_name || 'Unknown'}
                           </p>
                           <p className="text-white/40 text-sm">
-                            {membership.profile?.[0]?.email || (membership.profile as any)?.email}
+                            {memberProfile?.email}
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
@@ -393,6 +392,8 @@ export function ProfilePage() {
                           </span>
                         </div>
                       </div>
+                        )
+                      })()}
 
                       {isAdmin && membership.user_id !== user.id && (
                         <div className="flex items-center gap-2">

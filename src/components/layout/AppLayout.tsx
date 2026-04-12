@@ -2,8 +2,8 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useState } from 'react'
 import {
   LayoutDashboard, FolderKanban, Users, MessageSquare,
-  Calendar, Timer, LogOut, ChevronDown, Plus, Settings,
-  Bell, Search, User, Switch2
+  Calendar, Timer, LogOut, ChevronDown,
+  Bell, Search, User
 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { Avatar } from '../ui/Avatar'

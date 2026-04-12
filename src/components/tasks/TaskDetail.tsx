@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Calendar, User, Flag, Trash2, Edit3, Send, Loader2 } from 'lucide-react'
+import { AssigneePicker, type AssigneeOption } from './AssigneePicker'
 import { useAuthStore } from '../../store/authStore'
 import { useProjectsStore } from '../../store/projectsStore'
 import { supabase } from '../../lib/supabase'
@@ -15,6 +16,15 @@ interface TaskDetailProps {
   boards: { id: string; name: string }[]
 }
 
+const getTodayDateString = () => new Date().toISOString().split('T')[0]
+const isPastDueDate = (value: string) => {
+  const selectedDate = new Date(value)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  selectedDate.setHours(0, 0, 0, 0)
+  return selectedDate < today
+}
+
 export function TaskDetail({ task, onClose, boards }: TaskDetailProps) {
   const { user } = useAuthStore()
   const { updateTask, deleteTask } = useProjectsStore()
@@ -28,8 +38,9 @@ export function TaskDetail({ task, onClose, boards }: TaskDetailProps) {
   const [commentText, setCommentText] = useState('')
   const [loadingComments, setLoadingComments] = useState(false)
   const [submittingComment, setSubmittingComment] = useState(false)
-  const [members, setMembers] = useState<Profile[]>([])
+  const [assigneeOptions, setAssigneeOptions] = useState<AssigneeOption[]>([])
   const [assigneeId, setAssigneeId] = useState<string | null>(null)
+  const [dueDateError, setDueDateError] = useState('')
 
   useEffect(() => {
     if (task) {
@@ -39,8 +50,9 @@ export function TaskDetail({ task, onClose, boards }: TaskDetailProps) {
       setDueDate(task.due_date ? task.due_date.split('T')[0] : '')
       setBoardId(task.board_id)
       setAssigneeId(task.assignee_id)
+      setDueDateError('')
       loadComments(task.id)
-      loadMembers(task.project_id)
+      loadAssigneeOptions(task.project_id)
     }
   }, [task?.id])
 
@@ -55,18 +67,72 @@ export function TaskDetail({ task, onClose, boards }: TaskDetailProps) {
     setLoadingComments(false)
   }
 
-  const loadMembers = async (projectId: string) => {
+  const loadAssigneeOptions = async (projectId: string) => {
     const { data: project } = await supabase.from('projects').select('organization_id').eq('id', projectId).single()
     if (!project) return
-    const { data } = await supabase
-      .from('memberships')
-      .select('profiles(*)')
-      .eq('organization_id', project.organization_id)
-    setMembers((data || []).map((m: any) => m.profiles).filter(Boolean) as Profile[])
+
+    const [membersResult, invitationsResult] = await Promise.all([
+      supabase
+        .from('memberships')
+        .select('id, user_id, role, profile:user_id(*)')
+        .eq('organization_id', project.organization_id),
+      supabase
+        .from('invitations')
+        .select('id, email, role, accepted')
+        .eq('organization_id', project.organization_id)
+        .eq('accepted', false),
+    ])
+
+    const memberOptions: AssigneeOption[] = (membersResult.data || [])
+      .map((membership: any) => {
+        const profile = Array.isArray(membership.profile) ? membership.profile[0] : membership.profile
+        if (!profile?.id) return null
+
+        return {
+          id: membership.id,
+          value: profile.id,
+          label: profile.full_name || profile.email,
+          secondary: `${profile.email} • ${membership.role}`,
+          status: 'member',
+        } satisfies AssigneeOption
+      })
+      .filter(Boolean) as AssigneeOption[]
+
+    const invitationOptions: AssigneeOption[] = (invitationsResult.data || []).map((invite: any) => ({
+      id: invite.id,
+      value: `invite:${invite.id}`,
+      label: invite.email,
+      secondary: `Invited • ${invite.role}`,
+      status: 'invited',
+      disabled: true,
+    }))
+
+    setAssigneeOptions([...memberOptions, ...invitationOptions])
+  }
+
+  const handleDueDateChange = (value: string) => {
+    if (!value) {
+      setDueDate('')
+      setDueDateError('')
+      return
+    }
+
+    if (isPastDueDate(value)) {
+      setDueDateError('Cannot set deadline to a past date')
+      return
+    }
+
+    setDueDate(value)
+    setDueDateError('')
   }
 
   const handleSave = async () => {
     if (!task) return
+    if (dueDate && isPastDueDate(dueDate)) {
+      setDueDateError('Cannot set deadline to a past date')
+      toast.error('Cannot set deadline to a past date')
+      return
+    }
     await updateTask(task.id, {
       title, description, priority,
       due_date: dueDate || null,
@@ -123,7 +189,14 @@ export function TaskDetail({ task, onClose, boards }: TaskDetailProps) {
               </div>
               <div>
                 <label className="block text-xs text-white/40 mb-1">Due Date</label>
-                <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="input" />
+                <input
+                  type="date"
+                  value={dueDate}
+                  onChange={e => handleDueDateChange(e.target.value)}
+                  min={getTodayDateString()}
+                  className="input"
+                />
+                {dueDateError && <p className="text-red-400 text-xs mt-1">{dueDateError}</p>}
               </div>
               <div>
                 <label className="block text-xs text-white/40 mb-1">Column</label>
@@ -133,10 +206,11 @@ export function TaskDetail({ task, onClose, boards }: TaskDetailProps) {
               </div>
               <div>
                 <label className="block text-xs text-white/40 mb-1">Assignee</label>
-                <select value={assigneeId || ''} onChange={e => setAssigneeId(e.target.value || null)} className="input">
-                  <option value="">Unassigned</option>
-                  {members.map(m => <option key={m.id} value={m.id}>{m.full_name || m.email}</option>)}
-                </select>
+                <AssigneePicker
+                  options={assigneeOptions}
+                  selectedValue={assigneeId}
+                  onChange={setAssigneeId}
+                />
               </div>
             </div>
             <div className="flex gap-2 justify-end">
