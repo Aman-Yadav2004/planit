@@ -258,12 +258,17 @@ CREATE POLICY "Org members can view each other's profiles" ON public.profiles FO
 
 -- ORGANIZATIONS policies
 CREATE POLICY "Org members can view organization" ON public.organizations FOR SELECT USING (public.is_org_member(id));
+CREATE POLICY "Org creators can view own organization" ON public.organizations FOR SELECT USING (auth.uid() = created_by);
 CREATE POLICY "Authenticated users can create org" ON public.organizations FOR INSERT WITH CHECK (auth.uid() = created_by);
 CREATE POLICY "Org admins can update" ON public.organizations FOR UPDATE USING (public.is_org_admin(id));
 
 -- MEMBERSHIPS policies
 CREATE POLICY "Members can view memberships in their org" ON public.memberships FOR SELECT USING (public.is_org_member(organization_id));
-CREATE POLICY "Admins can insert memberships" ON public.memberships FOR INSERT WITH CHECK (public.is_org_admin(organization_id) OR auth.uid() = user_id);
+CREATE POLICY "Org creators can insert first membership" ON public.memberships FOR INSERT WITH CHECK (
+  auth.uid() = user_id AND 
+  EXISTS (SELECT 1 FROM public.organizations WHERE id = organization_id AND created_by = auth.uid())
+);
+CREATE POLICY "Admins can insert memberships" ON public.memberships FOR INSERT WITH CHECK (public.is_org_admin(organization_id));
 CREATE POLICY "Admins can update memberships" ON public.memberships FOR UPDATE USING (public.is_org_admin(organization_id));
 CREATE POLICY "Admins can delete memberships" ON public.memberships FOR DELETE USING (public.is_org_admin(organization_id));
 
