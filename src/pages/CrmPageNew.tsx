@@ -25,6 +25,7 @@ function ContactForm({
     company: initial?.company || '',
     stage: initial?.stage || ('lead' as CrmContact['stage']),
     notes: initial?.notes || '',
+    assigned_to: initial?.assigned_to || '',
   })
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -92,12 +93,22 @@ function ContactForm({
           </select>
         </div>
         <div className="col-span-2">
+          <label className="block text-xs text-white/40 mb-1.5">Assign To</label>
+          <input
+            value={form.assigned_to}
+            onChange={(e) => setForm({ ...form, assigned_to: e.target.value })}
+            className="input"
+            placeholder="Team member name or email"
+          />
+        </div>
+        <div className="col-span-2">
           <label className="block text-xs text-white/40 mb-1.5">Notes</label>
           <textarea
             value={form.notes}
             onChange={(e) => setForm({ ...form, notes: e.target.value })}
             className="input min-h-[70px] resize-none"
             placeholder="Add any notes..."
+          />
           />
         </div>
       </div>

@@ -156,7 +156,7 @@ export function ProfilePage() {
       
       console.log('Invitation created:', { inviteEmail, token, inviteLink })
 
-      // Call Edge Function to send email
+      // Try to send email via Edge Function, but don't fail if it doesn't work
       try {
         const response = await fetch(
           `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-invitation-email`,
@@ -176,23 +176,16 @@ export function ProfilePage() {
           }
         )
 
-        const emailResult = await response.json()
-        
-        if (!response.ok) {
-          console.error('Email send failed:', emailResult)
-          toast.error(`Email delivery failed. Share this link: ${inviteLink}`)
-        } else {
-          console.log('Email sent successfully:', emailResult)
+        if (response.ok) {
           toast.success(`Invitation sent to ${inviteEmail}!`)
+        } else {
+          toast.info(`Invitation created - Share link: ${inviteLink}`)
         }
       } catch (emailError) {
-        console.error('Error calling email function:', emailError)
-        toast.error(`Email could not be sent. Share this link: ${inviteLink}`)
+        console.log('Email function unavailable, invitation link ready to share')
+        toast.info(`Invitation created - Share link: ${inviteLink}`)
       }
       
-      // Copy link to clipboard as backup
-      navigator.clipboard.writeText(inviteLink)
-
       setInviteEmail('')
       setInviteRole('employee')
       setShowInviteModal(false)

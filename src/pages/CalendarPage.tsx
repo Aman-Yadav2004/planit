@@ -23,6 +23,21 @@ function EventForm({ date, onSave }: { date: Date; onSave: (data: Pick<EventInse
   const [description, setDescription] = useState('')
   const [startDate, setStartDate] = useState(format(date, 'yyyy-MM-dd'))
   const [type, setType] = useState<CalendarEvent['type']>('event')
+  const [dateError, setDateError] = useState('')
+
+  const handleDateChange = (newDate: string) => {
+    const selected = new Date(newDate)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    
+    if (selected < today) {
+      setDateError('Cannot set event to a past date')
+      setStartDate(format(date, 'yyyy-MM-dd'))
+    } else {
+      setDateError('')
+      setStartDate(newDate)
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -37,7 +52,14 @@ function EventForm({ date, onSave }: { date: Date; onSave: (data: Pick<EventInse
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="block text-xs text-white/40 mb-1.5">Date</label>
-          <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="input" />
+          <input 
+            type="date" 
+            value={startDate} 
+            onChange={e => handleDateChange(e.target.value)} 
+            min={format(new Date(), 'yyyy-MM-dd')}
+            className="input" 
+          />
+          {dateError && <p className="text-red-400 text-xs mt-1">{dateError}</p>}
         </div>
         <div>
           <label className="block text-xs text-white/40 mb-1.5">Type</label>
@@ -49,7 +71,11 @@ function EventForm({ date, onSave }: { date: Date; onSave: (data: Pick<EventInse
         </div>
       </div>
       <div className="flex justify-end">
-        <button onClick={() => onSave({ title, description, start_date: startDate, type })} disabled={!title.trim()} className="btn-primary">
+        <button 
+          onClick={() => onSave({ title, description, start_date: startDate, type })} 
+          disabled={!title.trim() || !!dateError} 
+          className="btn-primary"
+        >
           Add Event
         </button>
       </div>

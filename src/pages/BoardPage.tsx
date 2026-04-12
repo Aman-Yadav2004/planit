@@ -25,7 +25,28 @@ function CreateTaskForm({ boardId, boards, onSave }: {
   const [description, setDescription] = useState('')
   const [priority, setPriority] = useState<Task['priority']>('medium')
   const [dueDate, setDueDate] = useState('')
+  const [assignedTo, setAssignedTo] = useState('')
   const [selectedBoardId, setSelectedBoardId] = useState(boardId)
+  const [dueDateError, setDueDateError] = useState('')
+
+  const handleDateChange = (date: string) => {
+    if (date) {
+      const selectedDate = new Date(date)
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      
+      if (selectedDate < today) {
+        setDueDateError('Cannot set deadline to a past date')
+        setDueDate('')
+      } else {
+        setDueDateError('')
+        setDueDate(date)
+      }
+    } else {
+      setDueDate('')
+      setDueDateError('')
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -46,9 +67,25 @@ function CreateTaskForm({ boardId, boards, onSave }: {
         </div>
         <div>
           <label className="block text-xs text-white/40 mb-1.5">Due Date</label>
-          <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="input" />
+          <input 
+            type="date" 
+            value={dueDate} 
+            onChange={e => handleDateChange(e.target.value)} 
+            min={new Date().toISOString().split('T')[0]}
+            className="input" 
+          />
+          {dueDateError && <p className="text-red-400 text-xs mt-1">{dueDateError}</p>}
         </div>
-        <div className="col-span-2">
+        <div>
+          <label className="block text-xs text-white/40 mb-1.5">Assign To</label>
+          <input 
+            type="text" 
+            value={assignedTo} 
+            onChange={e => setAssignedTo(e.target.value)} 
+            placeholder="Team member name or email"
+            className="input" 
+          />
+        </div>
           <label className="block text-xs text-white/40 mb-1.5">Column</label>
           <select value={selectedBoardId} onChange={e => setSelectedBoardId(e.target.value)} className="input">
             {boards.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
@@ -57,8 +94,15 @@ function CreateTaskForm({ boardId, boards, onSave }: {
       </div>
       <div className="flex justify-end">
         <button
-          onClick={() => onSave({ title, description, priority, due_date: dueDate || undefined, board_id: selectedBoardId })}
-          disabled={!title.trim()}
+          onClick={() => onSave({ 
+            title, 
+            description, 
+            priority, 
+            due_date: dueDate || undefined, 
+            board_id: selectedBoardId,
+            assigned_to: assignedTo || undefined 
+          })}
+          disabled={!title.trim() || !!dueDateError}
           className="btn-primary"
         >
           Create Task
