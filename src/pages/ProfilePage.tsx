@@ -155,13 +155,43 @@ export function ProfilePage() {
       const inviteLink = `${window.location.origin}/join-org/${organization.id}?token=${token}`
       
       console.log('Invitation created:', { inviteEmail, token, inviteLink })
+
+      // Call Edge Function to send email
+      try {
+        const response = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-invitation-email`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token || ''}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              email: inviteEmail,
+              inviteLink,
+              orgName: organization.name,
+              role: inviteRole,
+              invitedByName: user.user_metadata?.full_name || user.email,
+            }),
+          }
+        )
+
+        const emailResult = await response.json()
+        
+        if (!response.ok) {
+          console.error('Email send failed:', emailResult)
+          toast.error(`Email delivery failed. Share this link: ${inviteLink}`)
+        } else {
+          console.log('Email sent successfully:', emailResult)
+          toast.success(`Invitation sent to ${inviteEmail}!`)
+        }
+      } catch (emailError) {
+        console.error('Error calling email function:', emailError)
+        toast.error(`Email could not be sent. Share this link: ${inviteLink}`)
+      }
       
-      // Show success with link to copy
-      toast.success(`Invitation created for ${inviteEmail}!`)
-      
-      // Copy link to clipboard automatically
+      // Copy link to clipboard as backup
       navigator.clipboard.writeText(inviteLink)
-      toast.info('Invite link copied to clipboard - share it with them')
 
       setInviteEmail('')
       setInviteRole('employee')
