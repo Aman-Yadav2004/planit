@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import { supabase } from '../lib/supabase'
 import { toast, ToastContainer } from '../components/ui/Toast'
@@ -18,10 +19,12 @@ import {
   Loader2,
   UserPlus,
   Crown,
+  Building2,
 } from 'lucide-react'
 
 export function ProfilePage() {
-  const { user, organization, signOut } = useAuthStore()
+  const { user, organization, signOut, fetchOrganizations, switchOrganization } = useAuthStore()
+  const navigate = useNavigate()
   const [profile, setProfile] = useState<Profile | null>(user)
   const [loading, setLoading] = useState(false)
   const [fullName, setFullName] = useState(user?.full_name || '')
@@ -34,8 +37,12 @@ export function ProfilePage() {
   const [inviteRole, setInviteRole] = useState<'admin' | 'employee'>('employee')
   const [inviteLoading, setInviteLoading] = useState(false)
   const [copiedToken, setCopiedToken] = useState<string | null>(null)
+  const [copiedOrgCode, setCopiedOrgCode] = useState(false)
   const [userRole, setUserRole] = useState<'admin' | 'employee' | null>(null)
   const [roleLoading, setRoleLoading] = useState(true)
+  const [showJoinModal, setShowJoinModal] = useState(false)
+  const [joinCode, setJoinCode] = useState('')
+  const [joiningOrg, setJoiningOrg] = useState(false)
 
   const getMemberProfile = (membership: Membership & { profile?: Profile | Profile[] }) =>
     Array.isArray(membership.profile) ? membership.profile[0] : membership.profile
@@ -249,11 +256,86 @@ export function ProfilePage() {
     await signOut()
   }
 
+  const handleLeaveOrg = async () => {
+    if (!organization || !user) return
+    if (!confirm(`Leave "${organization.name}"? You'll need the org code to rejoin.`)) return
+    try {
+      const { error } = await supabase
+        .from('memberships')
+        .delete()
+        .eq('organization_id', organization.id)
+        .eq('user_id', user.id)
+
+      if (error) throw error
+
+      toast.success('Left organization')
+      await fetchOrganizations(user.id)
+      navigate('/onboarding')
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to leave organization')
+    }
+  }
+
+  const handleJoinOrg = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!user) return
+    setJoiningOrg(true)
+    try {
+      const { data: org, error: orgError } = await supabase
+        .from('organizations')
+        .select('*')
+        .eq('org_code', joinCode.toUpperCase())
+        .single()
+
+      if (orgError || !org) {
+        toast.error('Organization code not found')
+        return
+      }
+
+      const { data: existing } = await supabase
+        .from('memberships')
+        .select('id')
+        .eq('organization_id', org.id)
+        .eq('user_id', user.id)
+        .maybeSingle()
+
+      if (existing) {
+        toast.info('You are already a member of this organization')
+        setJoinCode('')
+        setShowJoinModal(false)
+        return
+      }
+
+      const { error: memberError } = await supabase
+        .from('memberships')
+        .insert({ organization_id: org.id, user_id: user.id, role: 'employee' })
+
+      if (memberError) throw memberError
+
+      toast.success(`Joined "${org.name}"!`)
+      setJoinCode('')
+      setShowJoinModal(false)
+      await fetchOrganizations(user.id)
+      switchOrganization(org.id)
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to join organization')
+    } finally {
+      setJoiningOrg(false)
+    }
+  }
+
   const copyToClipboard = (token: string) => {
     const link = `${window.location.origin}/join-org/${organization?.id}?token=${token}`
     navigator.clipboard.writeText(link)
     setCopiedToken(token)
     setTimeout(() => setCopiedToken(null), 2000)
+  }
+
+  const copyOrgCode = () => {
+    if (!organization?.org_code) return
+    navigator.clipboard.writeText(organization.org_code)
+    setCopiedOrgCode(true)
+    setTimeout(() => setCopiedOrgCode(false), 2000)
   }
 
   const isAdmin = userRole === 'admin'
@@ -333,6 +415,96 @@ export function ProfilePage() {
 
           {/* Organization Management */}
           <div className="lg:col-span-2 space-y-8">
+            {organization && (
+              <div className="bg-surface-dark rounded-xl border border-white/5 p-6">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <div className="w-10 h-10 bg-brand-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <Building2 size={20} className="text-brand-300" />
+                    </div>
+                    <div className="min-w-0">
+                      <h2 className="text-lg font-semibold text-white">Organization</h2>
+                      <p className="text-white/40 text-sm truncate">{organization.name}</p>
+                    </div>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-white/40 text-xs mb-1">Organization Code</p>
+                    <button
+                      type="button"
+                      onClick={copyOrgCode}
+                      className="inline-flex items-center gap-2 bg-surface border border-white/10 hover:border-brand-500/40 rounded-lg px-3 py-2 transition"
+                      title="Copy organization code"
+                    >
+                      <span className="text-brand-300 font-semibold tracking-widest">
+                        {organization.org_code || 'Unavailable'}
+                      </span>
+                      {copiedOrgCode ? (
+                        <Check size={15} className="text-green-400" />
+                      ) : (
+                        <Copy size={15} className="text-white/50" />
+                      )}
+                    </button>
+                    <div className="mt-3 space-x-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowJoinModal(true)}
+                        className="inline-flex items-center gap-2 bg-surface border border-white/10 hover:border-brand-500/40 rounded-lg px-3 py-2 transition text-sm"
+                      >
+                        <UserPlus size={14} /> Join Organization
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleLeaveOrg}
+                        className="inline-flex items-center gap-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg px-3 py-2 transition text-sm"
+                      >
+                        <Trash2 size={14} /> Leave Organization
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Join Organization Modal */}
+            <Modal open={showJoinModal} onClose={() => setShowJoinModal(false)} title="Join Organization">
+              <form onSubmit={handleJoinOrg} className="space-y-4">
+                <div>
+                  <label className="block text-sm text-white/60 mb-1.5">Organization Code</label>
+                  <input
+                    type="text"
+                    value={joinCode.toUpperCase()}
+                    onChange={(e) => setJoinCode(e.target.value.toUpperCase().slice(0, 8))}
+                    placeholder="ABC12345"
+                    className="input text-center text-lg tracking-widest font-semibold"
+                    required
+                    maxLength={8}
+                    autoFocus
+                  />
+                  <p className="text-white/40 text-xs mt-2">Ask your organization administrator for the code</p>
+                </div>
+
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setJoinCode('')
+                      setShowJoinModal(false)
+                    }}
+                    className="btn-secondary px-4 py-2"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={joiningOrg || joinCode.length !== 8}
+                    className="btn-primary px-4 py-2 flex items-center gap-2"
+                  >
+                    {joiningOrg ? 'Joining...' : 'Join'}
+                  </button>
+                </div>
+              </form>
+            </Modal>
+
             {/* Members Section */}
             <div className="bg-surface-dark rounded-xl border border-white/5 p-6">
               <div className="flex items-center justify-between mb-6">

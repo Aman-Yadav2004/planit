@@ -5,12 +5,23 @@ import { toast } from '../components/ui/Toast'
 import { ToastContainer } from '../components/ui/Toast'
 import { Eye, EyeOff, Loader2 } from 'lucide-react'
 
+const validatePassword = (pwd: string): string | null => {
+  if (!pwd) return 'Password is required'
+  if (pwd.length < 8) return 'Password must be at least 8 characters'
+  if (!/[A-Z]/.test(pwd)) return 'Password must contain uppercase letter'
+  if (!/[a-z]/.test(pwd)) return 'Password must contain lowercase letter'
+  if (!/[0-9]/.test(pwd)) return 'Password must contain number'
+  if (!/[!@#$%^&*]/.test(pwd)) return 'Password must contain special character (!@#$%^&*)'
+  return null
+}
+
 export function AuthPage() {
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [fullName, setFullName] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [passwordError, setPasswordError] = useState('')
   const { signIn, signUp, loading } = useAuthStore()
   const navigate = useNavigate()
 
@@ -23,6 +34,8 @@ export function AuthPage() {
         navigate('/')
       } else {
         if (!fullName.trim()) { toast.error('Please enter your name'); return }
+        const pwdError = validatePassword(password)
+        if (pwdError) { toast.error(pwdError); return }
         const { error } = await signUp(email, password, fullName)
         if (error) { toast.error(error); return }
         toast.success('Account created! Set up your organization.')
@@ -42,7 +55,9 @@ export function AuthPage() {
         <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-violet-600/10 rounded-full blur-3xl" />
 
         <div className="relative flex items-center gap-3">
-          <div className="w-10 h-10 bg-brand-600 rounded-xl flex items-center justify-center text-xl">🪐</div>
+          <div className="w-10 h-10 bg-brand-600 rounded-xl flex items-center justify-center">
+            <img src="/plant.svg" alt="" className="w-7 h-7" />
+          </div>
           <span className="font-bold text-xl tracking-tight">PLAN-IT</span>
         </div>
 
@@ -52,7 +67,7 @@ export function AuthPage() {
             <span className="text-brand-400">control center.</span>
           </h1>
           <p className="text-white/50 text-lg mb-8">
-            Projects, CRM, chat, and productivity tools — all in one orbital workspace.
+            Projects, CRM, chat, and productivity tools — all in one growing workspace.
           </p>
           <div className="grid grid-cols-2 gap-3">
             {['Kanban Boards', 'CRM Pipeline', 'Team Chat', 'Focus Timer'].map(f => (
@@ -70,7 +85,9 @@ export function AuthPage() {
       <div className="flex-1 flex items-center justify-center p-8">
         <div className="w-full max-w-md">
           <div className="flex items-center gap-3 mb-8 lg:hidden">
-            <div className="w-9 h-9 bg-brand-600 rounded-xl flex items-center justify-center text-lg">🪐</div>
+            <div className="w-9 h-9 bg-brand-600 rounded-xl flex items-center justify-center">
+              <img src="/plant.svg" alt="" className="w-6 h-6" />
+            </div>
             <span className="font-bold text-lg tracking-tight">PLAN-IT</span>
           </div>
 
@@ -124,16 +141,22 @@ export function AuthPage() {
               />
             </div>
             <div>
-              <label className="block text-sm text-white/60 mb-1.5">Password</label>
+              <label className="block text-sm text-white/60 mb-1.5">Password {mode === 'register' && <span className="text-red-400">*</span>}</label>
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={password}
-                  onChange={e => setPassword(e.target.value)}
+                  onChange={e => {
+                    setPassword(e.target.value)
+                    if (mode === 'register') {
+                      const error = validatePassword(e.target.value)
+                      setPasswordError(error || '')
+                    }
+                  }}
                   placeholder="••••••••"
-                  className="input pr-10"
+                  className={`input pr-10 ${mode === 'register' && passwordError ? 'border-red-400/50' : ''}`}
                   required
-                  minLength={6}
+                  minLength={mode === 'register' ? 8 : 1}
                 />
                 <button
                   type="button"
@@ -143,6 +166,17 @@ export function AuthPage() {
                   {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
+              {mode === 'register' && passwordError && (
+                <p className="text-red-400 text-xs mt-1">{passwordError}</p>
+              )}
+              {mode === 'register' && !passwordError && password && (
+                <p className="text-emerald-400 text-xs mt-1">✓ Password is strong</p>
+              )}
+              {mode === 'register' && (
+                <p className="text-white/40 text-xs mt-2">
+                  Password must: 8+ chars, uppercase, lowercase, number, special char (!@#$%^&*)
+                </p>
+              )}
             </div>
 
             <button

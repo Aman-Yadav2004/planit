@@ -13,10 +13,12 @@ function ContactForm({
   initial,
   onSave,
   onCancel,
+  existingContacts = [],
 }: {
   initial?: Partial<CrmContact>
   onSave: (data: Partial<CrmContact>) => void
   onCancel: () => void
+  existingContacts?: CrmContact[]
 }) {
   const [form, setForm] = useState({
     name: initial?.name || '',
@@ -27,13 +29,70 @@ function ContactForm({
     notes: initial?.notes || '',
     assigned_to: initial?.assigned_to || '',
   })
+  const [errors, setErrors] = useState<Record<string, string>>({})
+
+  const validateEmail = (email: string): boolean => {
+    if (!email) return true
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    return emailRegex.test(email)
+  }
+
+  const validatePhone = (phone: string): boolean => {
+    if (!phone) return true
+    const phoneRegex = /^[0-9+\-\s()]*$/ 
+    return phoneRegex.test(phone) && phone.replace(/\D/g, '').length >= 10
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    const newErrors: Record<string, string> = {}
+
     if (!form.name.trim()) {
-      toast.error('Contact name is required')
+      newErrors.name = 'Contact name is required'
+    } else if (form.name.length > 100) {
+      newErrors.name = 'Name must be 100 characters or less'
+    } else if (!initial?.id) {
+      const isDuplicate = existingContacts.some(c => c.name.toLowerCase() === form.name.toLowerCase())
+      if (isDuplicate) {
+        newErrors.name = 'A contact with this name already exists'
+      }
+    }
+
+    if (form.email && !validateEmail(form.email)) {
+      newErrors.email = 'Please enter a valid email address'
+    } else if (form.email && form.email.length > 150) {
+      newErrors.email = 'Email must be 150 characters or less'
+    } else if (form.email && !initial?.id) {
+      const isDuplicate = existingContacts.some(c => c.email?.toLowerCase() === form.email.toLowerCase())
+      if (isDuplicate) {
+        newErrors.email = 'This email is already in use'
+      }
+    }
+
+    if (form.phone && !validatePhone(form.phone)) {
+      newErrors.phone = 'Phone must contain at least 10 digits'
+    } else if (form.phone && form.phone.length > 20) {
+      newErrors.phone = 'Phone must be 20 characters or less'
+    }
+
+    if (form.company && form.company.length > 100) {
+      newErrors.company = 'Company name must be 100 characters or less'
+    }
+
+    if (form.notes && form.notes.length > 500) {
+      newErrors.notes = 'Notes must be 500 characters or less'
+    }
+
+    if (form.assigned_to && form.assigned_to.length > 100) {
+      newErrors.assigned_to = 'Assigned to must be 100 characters or less'
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors)
       return
     }
+
+    setErrors({})
     onSave(form)
   }
 
@@ -41,42 +100,58 @@ function ContactForm({
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
         <div className="col-span-2">
-          <label className="block text-xs text-white/40 mb-1.5">Name *</label>
+          <label className="block text-xs text-white/40 mb-1.5">Name * ({form.name.length}/100)</label>
           <input
             value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            className="input"
+            onChange={(e) => {
+              setForm({ ...form, name: e.target.value.slice(0, 100) })
+              if (errors.name) setErrors({ ...errors, name: '' })
+            }}
+            className={`input ${errors.name ? 'border-red-400/50' : ''}`}
             placeholder="John Smith"
             required
           />
+          {errors.name && <p className="text-red-400 text-xs mt-1">{errors.name}</p>}
         </div>
         <div>
-          <label className="block text-xs text-white/40 mb-1.5">Email</label>
+          <label className="block text-xs text-white/40 mb-1.5">Email ({form.email.length}/150)</label>
           <input
             type="email"
             value={form.email}
-            onChange={(e) => setForm({ ...form, email: e.target.value })}
-            className="input"
+            onChange={(e) => {
+              setForm({ ...form, email: e.target.value.slice(0, 150) })
+              if (errors.email) setErrors({ ...errors, email: '' })
+            }}
+            className={`input ${errors.email ? 'border-red-400/50' : ''}`}
             placeholder="john@company.com"
           />
+          {errors.email && <p className="text-red-400 text-xs mt-1">{errors.email}</p>}
         </div>
         <div>
-          <label className="block text-xs text-white/40 mb-1.5">Phone</label>
+          <label className="block text-xs text-white/40 mb-1.5">Phone ({form.phone.length}/20)</label>
           <input
             value={form.phone}
-            onChange={(e) => setForm({ ...form, phone: e.target.value })}
-            className="input"
+            onChange={(e) => {
+              setForm({ ...form, phone: e.target.value.slice(0, 20) })
+              if (errors.phone) setErrors({ ...errors, phone: '' })
+            }}
+            className={`input ${errors.phone ? 'border-red-400/50' : ''}`}
             placeholder="+1 234 567 890"
           />
+          {errors.phone && <p className="text-red-400 text-xs mt-1">{errors.phone}</p>}
         </div>
         <div>
-          <label className="block text-xs text-white/40 mb-1.5">Company</label>
+          <label className="block text-xs text-white/40 mb-1.5">Company ({form.company.length}/100)</label>
           <input
             value={form.company}
-            onChange={(e) => setForm({ ...form, company: e.target.value })}
-            className="input"
+            onChange={(e) => {
+              setForm({ ...form, company: e.target.value.slice(0, 100) })
+              if (errors.company) setErrors({ ...errors, company: '' })
+            }}
+            className={`input ${errors.company ? 'border-red-400/50' : ''}`}
             placeholder="Acme Inc"
           />
+          {errors.company && <p className="text-red-400 text-xs mt-1">{errors.company}</p>}
         </div>
         <div>
           <label className="block text-xs text-white/40 mb-1.5">Stage</label>
@@ -93,22 +168,30 @@ function ContactForm({
           </select>
         </div>
         <div className="col-span-2">
-          <label className="block text-xs text-white/40 mb-1.5">Assign To</label>
+          <label className="block text-xs text-white/40 mb-1.5">Assign To ({form.assigned_to.length}/100)</label>
           <input
             value={form.assigned_to}
-            onChange={(e) => setForm({ ...form, assigned_to: e.target.value })}
-            className="input"
+            onChange={(e) => {
+              setForm({ ...form, assigned_to: e.target.value.slice(0, 100) })
+              if (errors.assigned_to) setErrors({ ...errors, assigned_to: '' })
+            }}
+            className={`input ${errors.assigned_to ? 'border-red-400/50' : ''}`}
             placeholder="Team member name or email"
           />
+          {errors.assigned_to && <p className="text-red-400 text-xs mt-1">{errors.assigned_to}</p>}
         </div>
         <div className="col-span-2">
-          <label className="block text-xs text-white/40 mb-1.5">Notes</label>
+          <label className="block text-xs text-white/40 mb-1.5">Notes ({form.notes.length}/500)</label>
           <textarea
             value={form.notes}
-            onChange={(e) => setForm({ ...form, notes: e.target.value })}
-            className="input min-h-[70px] resize-none"
+            onChange={(e) => {
+              setForm({ ...form, notes: e.target.value.slice(0, 500) })
+              if (errors.notes) setErrors({ ...errors, notes: '' })
+            }}
+            className={`input min-h-[70px] resize-none ${errors.notes ? 'border-red-400/50' : ''}`}
             placeholder="Add any notes..."
           />
+          {errors.notes && <p className="text-red-400 text-xs mt-1">{errors.notes}</p>}
         </div>
       </div>
 
@@ -350,20 +433,6 @@ export function CrmPageNew() {
                     ))
                   )}
                 </div>
-
-                {/* Add button */}
-                <div className="p-3 border-t border-white/5">
-                  <button
-                    onClick={() => {
-                      setEditContact(null)
-                      setShowModal(true)
-                    }}
-                    className="flex items-center justify-center gap-1.5 w-full text-xs text-white/30 hover:text-white/60 transition py-2"
-                  >
-                    <Plus size={14} />
-                    Add Contact
-                  </button>
-                </div>
               </div>
             )
           })}
@@ -386,6 +455,7 @@ export function CrmPageNew() {
             setShowModal(false)
             setEditContact(null)
           }}
+          existingContacts={contacts}
         />
       </Modal>
     </div>

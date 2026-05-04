@@ -15,7 +15,7 @@ export function OnboardingPage() {
   const [userRole, setUserRole] = useState<'admin' | 'employee'>('admin')
   const [createdOrgCode, setCreatedOrgCode] = useState<string>('')
   const [copied, setCopied] = useState(false)
-  const { user, fetchOrganizations, fetchOrganization } = useAuthStore()
+  const { user, fetchOrganizations, fetchOrganization, setOrganization } = useAuthStore()
   const navigate = useNavigate()
 
   const handleCreateOrganization = async (e: React.FormEvent) => {
@@ -40,6 +40,9 @@ export function OnboardingPage() {
       })
 
       if (memberError) throw memberError
+
+      setOrganization(org)
+      await fetchOrganizations(user.id)
 
       // Display the org code for sharing
       if (org.org_code) {
@@ -89,8 +92,8 @@ export function OnboardingPage() {
     <div className="min-h-screen bg-surface flex items-center justify-center p-8">
       <div className="w-full max-w-md">
         <div className="flex items-center gap-3 mb-10">
-          <div className="w-10 h-10 bg-brand-600 rounded-xl flex items-center justify-center text-xl">
-            🪐
+          <div className="w-10 h-10 bg-brand-600 rounded-xl flex items-center justify-center">
+            <img src="/plant.svg" alt="" className="w-7 h-7" />
           </div>
           <span className="font-bold text-xl text-white">PLAN-IT</span>
         </div>

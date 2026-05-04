@@ -209,8 +209,8 @@ export function JoinOrgPage() {
       <div className="max-w-md w-full">
         <div className="bg-surface-dark rounded-xl border border-white/5 p-8">
           <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-brand-600 rounded-xl flex items-center justify-center text-2xl mx-auto mb-4">
-              🪐
+            <div className="w-16 h-16 bg-brand-600 rounded-xl flex items-center justify-center mx-auto mb-4">
+              <img src="/plant.svg" alt="" className="w-11 h-11" />
             </div>
             <h1 className="text-2xl font-bold text-white mb-2">Join Organization</h1>
             <p className="text-white/60">{orgName}</p>

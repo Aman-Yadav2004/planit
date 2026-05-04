@@ -10,6 +10,7 @@ import { CrmPageNew } from './pages/CrmPageNew'
 import { ChatPage } from './pages/ChatPage'
 import { CalendarPage } from './pages/CalendarPage'
 import { PomodoroPage } from './pages/PomodoroPage'
+import { AttendancePage } from './pages/AttendancePage'
 import { OnboardingPage } from './pages/OnboardingPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { JoinOrgPage } from './pages/JoinOrgPage'
@@ -47,9 +48,6 @@ export default function App() {
         <Route path="/join-org/:orgId" element={
           <ProtectedRoute><JoinOrgPage /></ProtectedRoute>
         } />
-        <Route path="/profile" element={
-          <ProtectedRoute><ProfilePage /></ProtectedRoute>
-        } />
         <Route path="/" element={
           <OrgRoute><AppLayout /></OrgRoute>
         }>
@@ -60,6 +58,8 @@ export default function App() {
           <Route path="chat" element={<ChatPage />} />
           <Route path="calendar" element={<CalendarPage />} />
           <Route path="pomodoro" element={<PomodoroPage />} />
+          <Route path="attendance" element={<AttendancePage />} />
+          <Route path="profile" element={<ProfilePage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

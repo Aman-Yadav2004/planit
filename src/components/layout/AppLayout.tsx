@@ -3,11 +3,12 @@ import { useState } from 'react'
 import {
   LayoutDashboard, FolderKanban, Users, MessageSquare,
   Calendar, Timer, LogOut, ChevronDown,
-  Bell, Search, User
+  Bell, Search, User, BarChart3, Building2
 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { Avatar } from '../ui/Avatar'
-import { ToastContainer } from '../ui/Toast'
+import { ToastContainer, toast } from '../ui/Toast'
+
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -15,11 +16,13 @@ const navItems = [
   { to: '/crm', label: 'CRM', icon: Users },
   { to: '/chat', label: 'Chat', icon: MessageSquare },
   { to: '/calendar', label: 'Calendar', icon: Calendar },
+  { to: '/attendance', label: 'Attendance', icon: BarChart3 },
   { to: '/pomodoro', label: 'Focus', icon: Timer },
+  { to: '/profile', label: 'Organization', icon: Building2 },
 ]
 
 export function AppLayout() {
-  const { user, organization, organizations, signOut, switchOrganization } = useAuthStore()
+  const { user, organization, organizations, signOut, switchOrganization, fetchOrganizations } = useAuthStore()
   const navigate = useNavigate()
   const [collapsed, setCollapsed] = useState(false)
   const [showOrgDropdown, setShowOrgDropdown] = useState(false)
@@ -29,15 +32,17 @@ export function AppLayout() {
     navigate('/auth')
   }
 
+  
+
   return (
-    <div className="flex h-screen bg-surface overflow-hidden">
+    <div className="relative flex h-screen bg-surface overflow-hidden">
       {/* Sidebar */}
       <aside className={`flex flex-col bg-surface-1 border-r border-white/5 transition-all duration-300 flex-shrink-0 ${collapsed ? 'w-16' : 'w-60'}`}>
         {/* Logo & Org Switcher */}
         <div className="border-b border-white/5">
           <div className="flex items-center gap-3 px-4 py-5">
-            <div className="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center flex-shrink-0 text-lg">
-              🪐
+            <div className="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center flex-shrink-0">
+              <img src="/plant.svg" alt="" className="w-6 h-6" />
             </div>
             {!collapsed && (
               <div className="min-w-0 flex-1">
@@ -60,27 +65,39 @@ export function AppLayout() {
           </div>
 
           {/* Organization Dropdown */}
-          {showOrgDropdown && !collapsed && organizations.length > 1 && (
+          {showOrgDropdown && !collapsed && (
             <div className="border-t border-white/5 p-2 bg-surface-dark/50">
-              <p className="text-white/40 text-xs px-3 py-2 font-semibold">Your Organizations</p>
+              <p className="text-white/40 text-xs px-3 py-2 font-semibold">Organizations</p>
               <div className="space-y-1">
-                {organizations.map(org => (
-                  <button
-                    key={org.id}
-                    onClick={() => {
-                      switchOrganization(org.id)
-                      setShowOrgDropdown(false)
-                    }}
-                    className={`w-full text-left px-3 py-2 rounded-lg text-sm transition ${
-                      organization?.id === org.id
-                        ? 'bg-brand-600/20 text-brand-300 font-medium'
-                        : 'text-white/60 hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    {org.name}
-                  </button>
-                ))}
+                {organizations.length > 0 ? (
+                  <>
+                    {organizations.map(org => (
+                      <button
+                        key={org.id}
+                        onClick={() => {
+                          switchOrganization(org.id)
+                          setShowOrgDropdown(false)
+                        }}
+                        className={`w-full text-left px-3 py-2 rounded-lg text-sm transition ${
+                          organization?.id === org.id
+                            ? 'bg-brand-600/20 text-brand-300 font-medium'
+                            : 'text-white/60 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        {org.name}
+                      </button>
+                    ))}
+                  </>
+                ) : (
+                  <div className="text-xs text-white/30 px-3 py-2">No organizations</div>
+                )}
               </div>
+              
+              {organization && (
+                <div className="border-t border-white/5 mt-2 pt-2 space-y-1">
+                  <div className="text-xs text-white/40 px-3 py-2">Manage organization on your profile page</div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -139,6 +156,17 @@ export function AppLayout() {
         </div>
       </aside>
 
+      {/* Expand button when collapsed */}
+      {collapsed && (
+        <button
+          onClick={() => setCollapsed(false)}
+          title="Expand sidebar"
+          className="absolute left-16 top-6 z-50 -translate-x-1/2 bg-surface-2 hover:bg-white/5 p-1 rounded-full border border-white/5 shadow-sm"
+        >
+          <ChevronDown size={16} className="-rotate-90" />
+        </button>
+      )}
+
       {/* Main */}
       <main className="flex-1 overflow-hidden flex flex-col min-w-0">
         {/* Top bar */}
@@ -167,6 +195,8 @@ export function AppLayout() {
       </main>
 
       <ToastContainer />
+      
+      
     </div>
   )
 }

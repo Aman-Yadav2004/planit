@@ -293,6 +293,7 @@ DROP POLICY IF EXISTS "Org creators can view own organization" ON public.organiz
 DROP POLICY IF EXISTS "Authenticated users can create org" ON public.organizations;
 DROP POLICY IF EXISTS "Org admins can update" ON public.organizations;
 DROP POLICY IF EXISTS "Members can view memberships in their org" ON public.memberships;
+DROP POLICY IF EXISTS "Users can view own membership" ON public.memberships;
 DROP POLICY IF EXISTS "Org creators can insert first membership" ON public.memberships;
 DROP POLICY IF EXISTS "Admins can insert memberships" ON public.memberships;
 DROP POLICY IF EXISTS "Admins can update memberships" ON public.memberships;
@@ -351,6 +352,7 @@ CREATE POLICY "Org admins can update" ON public.organizations FOR UPDATE USING (
 
 -- MEMBERSHIPS policies
 CREATE POLICY "Members can view memberships in their org" ON public.memberships FOR SELECT USING (public.is_org_member(organization_id));
+CREATE POLICY "Users can view own membership" ON public.memberships FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "Org creators can insert first membership" ON public.memberships FOR INSERT WITH CHECK (
   auth.uid() = user_id AND 
   EXISTS (SELECT 1 FROM public.organizations WHERE id = organization_id AND created_by = auth.uid())

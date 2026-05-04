@@ -23,6 +23,11 @@ interface AuthState {
   initialize: () => Promise<void>
 }
 
+function normalizeOrganization(value: unknown): Organization | null {
+  if (!value) return null
+  return Array.isArray(value) ? (value[0] as Organization | undefined) ?? null : (value as Organization)
+}
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   organization: null,
@@ -120,15 +125,45 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       .select('organization_id, organizations(*)')
       .eq('user_id', userId)
       .limit(1)
-      .single()
+      .maybeSingle()
     if (error) {
       set({ organization: null })
       return { error: error.message }
     }
-    if (data?.organizations) {
-      set({ organization: data.organizations as unknown as Organization })
+    const memberOrg = normalizeOrganization(data?.organizations)
+    if (memberOrg) {
+      set({ organization: memberOrg })
       return { error: null }
     }
+
+    const { data: ownedOrg, error: ownedOrgError } = await supabase
+      .from('organizations')
+      .select('*')
+      .eq('created_by', userId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (ownedOrgError) {
+      set({ organization: null })
+      return { error: ownedOrgError.message }
+    }
+
+    if (ownedOrg) {
+      await supabase
+        .from('memberships')
+        .upsert(
+          { organization_id: ownedOrg.id, user_id: userId, role: 'admin' },
+          { onConflict: 'organization_id,user_id' }
+        )
+
+      set({
+        organization: ownedOrg,
+        organizations: [ownedOrg, ...get().organizations.filter(org => org.id !== ownedOrg.id)],
+      })
+      return { error: null }
+    }
+
     set({ organization: null })
     return { error: null }
   },
@@ -139,8 +174,32 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       .select('organization_id, organizations(*)')
       .eq('user_id', userId)
     if (error) return { error: error.message }
-    const orgs = data?.map(m => m.organizations as unknown as Organization) || []
+    const memberOrgs = data?.map(m => normalizeOrganization(m.organizations)).filter(Boolean) as Organization[] || []
+    const { data: ownedOrgs, error: ownedOrgsError } = await supabase
+      .from('organizations')
+      .select('*')
+      .eq('created_by', userId)
+
+    if (ownedOrgsError) return { error: ownedOrgsError.message }
+
+    const orgsById = new Map<string, Organization>()
+    memberOrgs.forEach(org => orgsById.set(org.id, org))
+    ;(ownedOrgs || []).forEach(org => orgsById.set(org.id, org))
+
+    const orgs = Array.from(orgsById.values())
     set({ organizations: orgs })
+
+    await Promise.all(
+      (ownedOrgs || []).map(org =>
+        supabase
+          .from('memberships')
+          .upsert(
+            { organization_id: org.id, user_id: userId, role: 'admin' },
+            { onConflict: 'organization_id,user_id' }
+          )
+      )
+    )
+
     return { error: null }
   },
 

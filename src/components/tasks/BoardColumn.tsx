@@ -71,16 +71,6 @@ export function BoardColumn({ board, onAddTask, onTaskClick, onDeleteBoard, onUp
           ))}
         </SortableContext>
       </div>
-
-      {/* Add task */}
-      <div className="p-3 border-t border-white/5">
-        <button
-          onClick={() => onAddTask(board.id)}
-          className="flex items-center gap-2 w-full px-3 py-2 text-sm text-white/40 hover:text-white hover:bg-white/5 rounded-xl transition-colors"
-        >
-          <Plus size={15} /> Add task
-        </button>
-      </div>
     </div>
   )
 }

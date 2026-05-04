@@ -27,11 +27,12 @@ const isPastDueDate = (value: string) => {
   return selectedDate < today
 }
 
-function CreateTaskForm({ boardId, boards, assigneeOptions, onSave }: {
+function CreateTaskForm({ boardId, boards, assigneeOptions, onSave, existingTasks = [] }: {
   boardId: string
   boards: { id: string; name: string }[]
   assigneeOptions: AssigneeOption[]
   onSave: (data: Partial<Task>) => void
+  existingTasks?: Task[]
 }) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -40,6 +41,7 @@ function CreateTaskForm({ boardId, boards, assigneeOptions, onSave }: {
   const [assigneeId, setAssigneeId] = useState<string | null>(null)
   const [selectedBoardId, setSelectedBoardId] = useState(boardId)
   const [dueDateError, setDueDateError] = useState('')
+  const [errors, setErrors] = useState<Record<string, string>>({})
 
   const handleDateChange = (date: string) => {
     if (date) {
@@ -56,15 +58,67 @@ function CreateTaskForm({ boardId, boards, assigneeOptions, onSave }: {
     }
   }
 
+  const validateSubmit = (): boolean => {
+    const newErrors: Record<string, string> = {}
+
+    if (!title.trim()) {
+      newErrors.title = 'Task title is required'
+    } else if (title.length > 100) {
+      newErrors.title = 'Title must be 100 characters or less'
+    } else {
+      const isDuplicate = existingTasks.some(
+        t => t.title.toLowerCase() === title.toLowerCase() && t.board_id === selectedBoardId
+      )
+      if (isDuplicate) {
+        newErrors.title = 'A task with this name already exists in this column'
+      }
+    }
+
+    if (description && description.length > 500) {
+      newErrors.description = 'Description must be 500 characters or less'
+    }
+
+    if (dueDateError) {
+      newErrors.dueDate = dueDateError
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors)
+      return false
+    }
+
+    setErrors({})
+    return true
+  }
+
   return (
     <div className="space-y-4">
       <div>
-        <label className="block text-xs text-white/40 mb-1.5">Title *</label>
-        <input value={title} onChange={e => setTitle(e.target.value)} className="input" placeholder="Task title" autoFocus />
+        <label className="block text-xs text-white/40 mb-1.5">Title * ({title.length}/100)</label>
+        <input 
+          value={title} 
+          onChange={e => {
+            setTitle(e.target.value.slice(0, 100))
+            if (errors.title) setErrors({ ...errors, title: '' })
+          }} 
+          className={`input ${errors.title ? 'border-red-400/50' : ''}`}
+          placeholder="Task title" 
+          autoFocus 
+        />
+        {errors.title && <p className="text-red-400 text-xs mt-1">{errors.title}</p>}
       </div>
       <div>
-        <label className="block text-xs text-white/40 mb-1.5">Description</label>
-        <textarea value={description} onChange={e => setDescription(e.target.value)} className="input min-h-[70px] resize-none" placeholder="Optional description..." />
+        <label className="block text-xs text-white/40 mb-1.5">Description ({description.length}/500)</label>
+        <textarea 
+          value={description} 
+          onChange={e => {
+            setDescription(e.target.value.slice(0, 500))
+            if (errors.description) setErrors({ ...errors, description: '' })
+          }} 
+          className={`input min-h-[70px] resize-none ${errors.description ? 'border-red-400/50' : ''}`}
+          placeholder="Optional description..." 
+        />
+        {errors.description && <p className="text-red-400 text-xs mt-1">{errors.description}</p>}
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
@@ -80,9 +134,9 @@ function CreateTaskForm({ boardId, boards, assigneeOptions, onSave }: {
             value={dueDate} 
             onChange={e => handleDateChange(e.target.value)} 
             min={new Date().toISOString().split('T')[0]}
-            className="input" 
+            className={`input ${errors.dueDate ? 'border-red-400/50' : ''}`}
           />
-          {dueDateError && <p className="text-red-400 text-xs mt-1">{dueDateError}</p>}
+          {errors.dueDate && <p className="text-red-400 text-xs mt-1">{errors.dueDate}</p>}
         </div>
         <div>
           <label className="block text-xs text-white/40 mb-1.5">Column</label>
@@ -102,15 +156,19 @@ function CreateTaskForm({ boardId, boards, assigneeOptions, onSave }: {
       </div>
       <div className="flex justify-end">
         <button
-          onClick={() => onSave({ 
-            title, 
-            description, 
-            priority, 
-            due_date: dueDate || undefined, 
-            board_id: selectedBoardId,
-            assignee_id: assigneeId || undefined
-          })}
-          disabled={!title.trim() || !!dueDateError}
+          onClick={() => {
+            if (validateSubmit()) {
+              onSave({ 
+                title, 
+                description, 
+                priority, 
+                due_date: dueDate || undefined, 
+                board_id: selectedBoardId,
+                assignee_id: assigneeId || undefined
+              })
+            }
+          }}
+          disabled={!title.trim()}
           className="btn-primary"
         >
           Create Task
@@ -368,6 +426,7 @@ export function BoardPage() {
             boards={boards.map(b => ({ id: b.id, name: b.name }))}
             assigneeOptions={assigneeOptions}
             onSave={handleCreateTask}
+            existingTasks={boards.flatMap(b => b.tasks || [])}
           />
         )}
       </Modal>

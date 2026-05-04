@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { FolderKanban, Users, MessageSquare, Timer, TrendingUp, CheckSquare, Clock, Plus } from 'lucide-react'
+import { FolderKanban, Users, MessageSquare, Timer, TrendingUp, CheckSquare, Clock, Plus, Calendar } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 import { useProjectsStore } from '../store/projectsStore'
 import { useCrmStore } from '../store/crmStore'
 import { supabase } from '../lib/supabase'
+import { toast, ToastContainer } from '../components/ui/Toast'
 import type { Task } from '../types/supabase'
 
 export function DashboardPage() {
@@ -13,6 +14,8 @@ export function DashboardPage() {
   const { contacts, fetchContacts } = useCrmStore()
   const [myTasks, setMyTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
+  const [todayAttendance, setTodayAttendance] = useState<any>(null)
+  const [markingAttendance, setMarkingAttendance] = useState(false)
 
   useEffect(() => {
     if (!organization) return
@@ -20,8 +23,46 @@ export function DashboardPage() {
       fetchProjects(organization.id),
       fetchContacts(organization.id),
       fetchMyTasks(),
+      fetchTodayAttendance(),
     ]).finally(() => setLoading(false))
   }, [organization?.id])
+
+  const fetchTodayAttendance = async () => {
+    if (!user) return
+    const today = new Date().toISOString().split('T')[0]
+    const { data } = await supabase
+      .from('attendances')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('date', today)
+      .maybeSingle()
+    setTodayAttendance(data)
+  }
+
+  const handleMarkAttendance = async () => {
+    if (!user) return
+    setMarkingAttendance(true)
+    try {
+      if (todayAttendance) {
+        toast.info('Attendance already marked for today')
+      } else {
+        const today = new Date().toISOString().split('T')[0]
+        const { error } = await supabase.from('attendances').insert({
+          user_id: user.id,
+          date: today,
+          started_at: new Date().toISOString(),
+          duration_minutes: 480,
+        })
+        if (error) throw error
+        toast.success('Attendance marked!')
+        await fetchTodayAttendance()
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to mark attendance')
+    } finally {
+      setMarkingAttendance(false)
+    }
+  }
 
   const fetchMyTasks = async () => {
     if (!user) return
@@ -47,7 +88,8 @@ export function DashboardPage() {
   ]
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6 animate-fade-in">
+    <>
+      <div className="p-6 max-w-6xl mx-auto space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
@@ -55,6 +97,18 @@ export function DashboardPage() {
           <p className="text-white/40 text-sm mt-1">Here's what's happening in {organization?.name}</p>
         </div>
         <div className="flex gap-2">
+          <button 
+            onClick={handleMarkAttendance}
+            disabled={markingAttendance || !!todayAttendance}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition-all ${
+              todayAttendance 
+                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
+                : 'btn-ghost hover:bg-white/5'
+            }`}
+          >
+            <Calendar size={16} />
+            {todayAttendance ? '✓ Marked' : 'Mark Attendance'}
+          </button>
           <Link to="/pomodoro" className="btn-ghost flex items-center gap-2">
             <Timer size={16} /> Focus
           </Link>
@@ -165,5 +219,7 @@ export function DashboardPage() {
         ))}
       </div>
     </div>
+    <ToastContainer />
+    </>
   )
 }
