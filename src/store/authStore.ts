@@ -235,41 +235,39 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   joinByOrgCode: async (orgCode) => {
     const { user } = get()
     if (!user) return { error: 'Not authenticated' }
-    
+
     try {
-      // Find org by code
-      const { data: org, error: orgError } = await supabase
+      // Call server-side RPC for RLS-safe, case-insensitive join
+      const { data, error } = await supabase.rpc('join_organization_by_code', { p_org_code: orgCode })
+
+      if (error) {
+        return { error: error.message || 'Organization code not found' }
+      }
+
+      // RPC returns rows; expect a single row
+      const row = Array.isArray(data) ? data[0] : data
+      if (!row) return { error: 'Organization code not found' }
+
+      const orgId = (row as any).org_id as string
+      const alreadyMember = (row as any).already_member as boolean
+
+      // Refresh organizations and set current organization
+      await get().fetchOrganizations(user.id)
+      const { data: org, error: fetchOrgError } = await supabase
         .from('organizations')
         .select('*')
-        .ilike('org_code', orgCode)
+        .eq('id', orgId)
         .maybeSingle()
-      
-      if (orgError || !org) return { error: 'Organization code not found' }
-      
-      // Check if already a member
-      const { data: existing } = await supabase
-        .from('memberships')
-        .select('id')
-        .eq('organization_id', org.id)
-        .eq('user_id', user.id)
-        .maybeSingle()
-      
-      if (existing) return { error: 'You are already a member of this organization', orgId: org.id }
-      
-      // Create membership as employee
-      const { error: memberError } = await supabase
-        .from('memberships')
-        .insert({ organization_id: org.id, user_id: user.id, role: 'employee' })
-      
-      if (memberError) return { error: memberError.message }
-      
-      // Fetch updated organizations
-      await get().fetchOrganizations(user.id)
-      set({ organization: org })
-      
-      return { error: null, orgId: org.id }
+
+      if (!fetchOrgError && org) set({ organization: org })
+
+      if (alreadyMember) {
+        return { error: 'You are already a member of this organization', orgId }
+      }
+
+      return { error: null, orgId }
     } catch (e: any) {
-      return { error: e.message }
+      return { error: e.message || 'Failed to join organization' }
     }
   },
 

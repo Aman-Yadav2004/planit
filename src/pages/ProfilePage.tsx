@@ -281,42 +281,24 @@ export function ProfilePage() {
     if (!user) return
     setJoiningOrg(true)
     try {
-      const { data: org, error: orgError } = await supabase
-        .from('organizations')
-        .select('*')
-        .ilike('org_code', joinCode)
-        .maybeSingle()
+      const result = await useAuthStore.getState().joinByOrgCode(joinCode)
 
-      if (orgError || !org) {
-        toast.error('Organization code not found')
-        return
-      }
-
-      const { data: existing } = await supabase
-        .from('memberships')
-        .select('id')
-        .eq('organization_id', org.id)
-        .eq('user_id', user.id)
-        .maybeSingle()
-
-      if (existing) {
-        toast.info('You are already a member of this organization')
+      if (result.error) {
+        if (result.error === 'You are already a member of this organization') {
+          toast.info(result.error)
+          setJoinCode('')
+          setShowJoinModal(false)
+          await fetchOrganizations(user.id)
+          if (result.orgId) switchOrganization(result.orgId)
+        } else {
+          toast.error(result.error)
+        }
+      } else {
+        toast.success('Successfully joined organization!')
         setJoinCode('')
         setShowJoinModal(false)
-        return
+        if (result.orgId) switchOrganization(result.orgId)
       }
-
-      const { error: memberError } = await supabase
-        .from('memberships')
-        .insert({ organization_id: org.id, user_id: user.id, role: 'employee' })
-
-      if (memberError) throw memberError
-
-      toast.success(`Joined "${org.name}"!`)
-      setJoinCode('')
-      setShowJoinModal(false)
-      await fetchOrganizations(user.id)
-      switchOrganization(org.id)
     } catch (error: any) {
       toast.error(error.message || 'Failed to join organization')
     } finally {
