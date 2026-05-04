@@ -238,7 +238,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     try {
       // Call server-side RPC for RLS-safe, case-insensitive join
-      const { data, error } = await supabase.rpc('join_organization_by_code', { p_org_code: orgCode })
+      const { data, error } = await (supabase as any).rpc('join_organization_by_code', { p_org_code: orgCode })
 
       if (error) {
         return { error: error.message || 'Organization code not found' }
