@@ -16,19 +16,27 @@ const validatePassword = (pwd: string): string | null => {
 }
 
 export function AuthPage() {
-  const [mode, setMode] = useState<'login' | 'register'>('login')
+  const [mode, setMode] = useState<'login' | 'register' | 'email'>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [fullName, setFullName] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [passwordError, setPasswordError] = useState('')
-  const { signIn, signUp, loading } = useAuthStore()
+  const [emailSent, setEmailSent] = useState(false)
+  const { signIn, signUp, signInWithEmail, loading } = useAuthStore()
   const navigate = useNavigate()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      if (mode === 'login') {
+      if (mode === 'email') {
+        if (!email.trim()) { toast.error('Please enter your email'); return }
+        const { error } = await signInWithEmail(email)
+        if (error) { toast.error(error); return }
+        setEmailSent(true)
+        toast.success('Check your email for the sign-in link!')
+        setEmail('')
+      } else if (mode === 'login') {
         const { error } = await signIn(email, password)
         if (error) { toast.error(error); return }
         navigate('/')
@@ -102,20 +110,26 @@ export function AuthPage() {
 
           {/* Tabs */}
           <div className="flex gap-1 bg-surface-2 rounded-xl p-1 mb-6">
-            {(['login', 'register'] as const).map(m => (
+            {(['login', 'register', 'email'] as const).map(m => (
               <button
                 key={m}
-                onClick={() => setMode(m)}
-                className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
+                onClick={() => { setMode(m); setEmailSent(false) }}
+                className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
                   mode === m ? 'bg-brand-600 text-white' : 'text-white/40 hover:text-white/60'
                 }`}
               >
-                {m === 'login' ? 'Sign In' : 'Register'}
+                {m === 'login' ? 'Sign In' : m === 'register' ? 'Register' : 'Email Link'}
               </button>
             ))}
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            {emailSent && mode === 'email' && (
+              <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-4 text-emerald-300 text-sm text-center">
+                ✓ Check your email for the sign-in link. It will expire in 24 hours.
+              </div>
+            )}
+
             {mode === 'register' && (
               <div>
                 <label className="block text-sm text-white/60 mb-1.5">Full Name</label>
@@ -129,6 +143,7 @@ export function AuthPage() {
                 />
               </div>
             )}
+            
             <div>
               <label className="block text-sm text-white/60 mb-1.5">Email</label>
               <input
@@ -140,53 +155,62 @@ export function AuthPage() {
                 required
               />
             </div>
-            <div>
-              <label className="block text-sm text-white/60 mb-1.5">Password {mode === 'register' && <span className="text-red-400">*</span>}</label>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={e => {
-                    setPassword(e.target.value)
-                    if (mode === 'register') {
-                      const error = validatePassword(e.target.value)
-                      setPasswordError(error || '')
-                    }
-                  }}
-                  placeholder="••••••••"
-                  className={`input pr-10 ${mode === 'register' && passwordError ? 'border-red-400/50' : ''}`}
-                  required
-                  minLength={mode === 'register' ? 8 : 1}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60"
-                >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
+
+            {mode !== 'email' && (
+              <div>
+                <label className="block text-sm text-white/60 mb-1.5">Password {mode === 'register' && <span className="text-red-400">*</span>}</label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={e => {
+                      setPassword(e.target.value)
+                      if (mode === 'register') {
+                        const error = validatePassword(e.target.value)
+                        setPasswordError(error || '')
+                      }
+                    }}
+                    placeholder="••••••••"
+                    className={`input pr-10 ${mode === 'register' && passwordError ? 'border-red-400/50' : ''}`}
+                    required
+                    minLength={mode === 'register' ? 8 : 1}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60"
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+                {mode === 'register' && passwordError && (
+                  <p className="text-red-400 text-xs mt-1">{passwordError}</p>
+                )}
+                {mode === 'register' && !passwordError && password && (
+                  <p className="text-emerald-400 text-xs mt-1">✓ Password is strong</p>
+                )}
+                {mode === 'register' && (
+                  <p className="text-white/40 text-xs mt-2">
+                    Password must: 8+ chars, uppercase, lowercase, number, special char (!@#$%^&*)
+                  </p>
+                )}
               </div>
-              {mode === 'register' && passwordError && (
-                <p className="text-red-400 text-xs mt-1">{passwordError}</p>
-              )}
-              {mode === 'register' && !passwordError && password && (
-                <p className="text-emerald-400 text-xs mt-1">✓ Password is strong</p>
-              )}
-              {mode === 'register' && (
-                <p className="text-white/40 text-xs mt-2">
-                  Password must: 8+ chars, uppercase, lowercase, number, special char (!@#$%^&*)
-                </p>
-              )}
-            </div>
+            )}
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || (emailSent && mode === 'email')}
               className="btn-primary w-full justify-center flex items-center gap-2 py-2.5 mt-2"
             >
               {loading && <Loader2 size={15} className="animate-spin" />}
-              {mode === 'login' ? 'Sign In' : 'Create Account'}
+              {mode === 'email' ? 'Send Sign-In Link' : mode === 'login' ? 'Sign In' : 'Create Account'}
             </button>
+
+            {mode === 'email' && (
+              <p className="text-white/40 text-xs text-center">
+                We'll send you a magic link to sign in instantly.
+              </p>
+            )}
           </form>
         </div>
       </div>

@@ -14,6 +14,7 @@ interface AuthState {
   setOrganization: (org: Organization | null) => void
   signIn: (email: string, password: string) => Promise<{ error: string | null }>
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: string | null }>
+  signInWithEmail: (email: string) => Promise<{ error: string | null }>
   signOut: () => Promise<void>
   fetchProfile: (userId: string) => Promise<{ error: string | null }>
   fetchOrganization: (userId: string) => Promise<{ error: string | null }>
@@ -95,6 +96,27 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     } catch (error) {
       return {
         error: error instanceof Error ? error.message : 'Sign up failed. Please try again.',
+      }
+    } finally {
+      set({ loading: false })
+    }
+  },
+
+  signInWithEmail: async (email) => {
+    set({ loading: true })
+    try {
+      const redirectUrl = `${window.location.origin}/auth`
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: redirectUrl,
+        },
+      })
+      if (error) return { error: error.message }
+      return { error: null }
+    } catch (error) {
+      return {
+        error: error instanceof Error ? error.message : 'Email sign in failed. Please try again.',
       }
     } finally {
       set({ loading: false })
@@ -219,8 +241,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const { data: org, error: orgError } = await supabase
         .from('organizations')
         .select('*')
-        .eq('org_code', orgCode.toUpperCase())
-        .single()
+        .ilike('org_code', orgCode)
+        .maybeSingle()
       
       if (orgError || !org) return { error: 'Organization code not found' }
       
@@ -230,7 +252,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         .select('id')
         .eq('organization_id', org.id)
         .eq('user_id', user.id)
-        .single()
+        .maybeSingle()
       
       if (existing) return { error: 'You are already a member of this organization', orgId: org.id }
       

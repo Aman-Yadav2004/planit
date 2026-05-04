@@ -284,8 +284,8 @@ export function ProfilePage() {
       const { data: org, error: orgError } = await supabase
         .from('organizations')
         .select('*')
-        .eq('org_code', joinCode.toUpperCase())
-        .single()
+        .ilike('org_code', joinCode)
+        .maybeSingle()
 
       if (orgError || !org) {
         toast.error('Organization code not found')

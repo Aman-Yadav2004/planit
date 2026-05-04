@@ -45,7 +45,7 @@ export function JoinOrgPage() {
           .select('id')
           .eq('organization_id', orgId)
           .eq('user_id', user.id)
-          .single()
+          .maybeSingle()
 
         if (existingMember) {
           setStatus('already-member')
@@ -60,7 +60,7 @@ export function JoinOrgPage() {
           .eq('token', token)
           .eq('organization_id', orgId)
           .eq('accepted', false)
-          .single()
+          .maybeSingle()
 
         if (error || !invitation) {
           setStatus('invalid')
@@ -87,7 +87,7 @@ export function JoinOrgPage() {
           .from('organizations')
           .select('name')
           .eq('id', orgId)
-          .single()
+          .maybeSingle()
 
         if (org) {
           setOrgName(org.name)
