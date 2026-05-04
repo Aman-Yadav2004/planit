@@ -6,20 +6,23 @@ import { format, startOfMonth } from 'date-fns'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../store/authStore'
 import { toast } from '../components/ui/Toast'
-import type { Database } from '../types/supabase'
-
-type AttendanceRow = Database['public']['Tables']['attendances']['Row']
+import type { Attendance } from '../types/supabase'
 
 interface AttendanceRecord {
   id: string
+  organization_id: string
+  user_id: string
   date: string
+  started_at: string
+  duration_minutes: number
+  created_at: string
   status: 'present' | 'absent' | 'late' | 'half-day'
 }
 
 export function AttendancePage() {
   const { user, organization } = useAuthStore()
   const [attendanceData, setAttendanceData] = useState<AttendanceRecord[]>([])
-  const [todayAttendance, setTodayAttendance] = useState<AttendanceRow | null>(null)
+  const [todayAttendance, setTodayAttendance] = useState<Attendance | null>(null)
   const [markingAttendance, setMarkingAttendance] = useState(false)
   const [loading, setLoading] = useState(true)
   const [timerRemaining, setTimerRemaining] = useState(0)
@@ -62,7 +65,7 @@ export function AttendancePage() {
       .eq('date', today)
       .maybeSingle()
 
-    setTodayAttendance((data as AttendanceRow | null) || null)
+    setTodayAttendance((data as Attendance | null) || null)
   }
 
   const fetchAttendanceData = async () => {
@@ -74,7 +77,7 @@ export function AttendancePage() {
 
       const { data, error } = await supabase
         .from('attendances')
-        .select('id, date, started_at, duration_minutes')
+        .select('*')
         .eq('organization_id', organization.id)
         .eq('user_id', user.id)
         .gte('date', startDate)
@@ -87,9 +90,8 @@ export function AttendancePage() {
 
       if (data) {
         const records: AttendanceRecord[] = data.map(item => ({
-          id: item.id,
-          date: item.date,
-          status: 'present',
+          ...item,
+          status: 'present' as const,
         }))
         setAttendanceData(records)
       } else {
@@ -132,7 +134,7 @@ export function AttendancePage() {
 
       if (error) throw error
 
-      setTodayAttendance(data as AttendanceRow)
+      setTodayAttendance(data as Attendance)
       await fetchAttendanceData()
       toast.success('Attendance recorded')
     } catch (err: any) {
@@ -265,7 +267,7 @@ export function AttendancePage() {
                       cx="50%"
                       cy="50%"
                       labelLine={false}
-                      label={({ name, value }) => `${name}: ${value}`}
+                      label={(props: any) => `${props.name}: ${props.value}`}
                       outerRadius={100}
                       fill="#8884d8"
                       dataKey="value"

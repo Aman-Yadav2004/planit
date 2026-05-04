@@ -435,6 +435,36 @@ export interface Database {
         }
         Relationships: []
       }
+      attendances: {
+        Row: {
+          id: string
+          organization_id: string
+          user_id: string
+          date: string
+          started_at: string
+          duration_minutes: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          user_id: string
+          date: string
+          started_at: string
+          duration_minutes: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          user_id?: string
+          date?: string
+          started_at?: string
+          duration_minutes?: number
+          created_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: Record<string, never>
     Functions: {
@@ -476,3 +506,4 @@ export type Message = Database['public']['Tables']['messages']['Row'] & {
   user?: Profile | null
 }
 export type CalendarEvent = Database['public']['Tables']['events']['Row']
+export type Attendance = Database['public']['Tables']['attendances']['Row']
