@@ -40,7 +40,7 @@ export function DashboardPage() {
   }
 
   const handleMarkAttendance = async () => {
-    if (!user) return
+    if (!user || !organization) return
     setMarkingAttendance(true)
     try {
       if (todayAttendance) {
@@ -49,6 +49,7 @@ export function DashboardPage() {
         const today = new Date().toISOString().split('T')[0]
         const { error } = await supabase.from('attendances').insert({
           user_id: user.id,
+          organization_id: organization.id,
           date: today,
           started_at: new Date().toISOString(),
           duration_minutes: 480,
