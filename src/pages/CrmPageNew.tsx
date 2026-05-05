@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Search, Phone, Mail, Building2, MoreHorizontal, Trash2, Edit3, GripVertical, X } from 'lucide-react'
+import { Plus, Search, Phone, Mail, Building2, MoreHorizontal, Trash2, Edit3, X } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 import { supabase } from '../lib/supabase'
 import { useCrmStore } from '../store/crmStore'
@@ -8,6 +8,19 @@ import { EmptyState } from '../components/ui/EmptyState'
 import { toast } from '../components/ui/Toast'
 import type { CrmContact } from '../types/supabase'
 import { AssigneePicker, AssigneeOption } from '../components/tasks/AssigneePicker'
+import {
+  DndContext,
+  DragOverlay,
+  closestCorners,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragStartEvent,
+  type DragEndEvent,
+  useDroppable,
+} from '@dnd-kit/core'
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import { ContactCard, ContactCardOverlay } from '../components/crm/ContactCard'
 
 const STAGES: CrmContact['stage'][] = ['lead', 'contacted', 'qualified', 'proposal', 'converted', 'lost']
 
@@ -204,6 +217,40 @@ function ContactForm({
   )
 }
 
+function StageColumn({ stage, contacts, isAdmin, onEdit, onDelete }: {
+  stage: CrmContact['stage']
+  contacts: CrmContact[]
+  isAdmin: boolean
+  onEdit: (c: CrmContact) => void
+  onDelete: (id: string) => void
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: stage, data: { type: 'stage', stage } })
+
+  return (
+    <div ref={setNodeRef} className={`flex flex-col rounded-2xl bg-surface-1 border transition-colors flex-shrink-0 w-80 ${isOver ? 'border-brand-500/30 bg-brand-500/5' : 'border-white/5'}`}>
+      <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
+        <span className="text-sm font-semibold text-white capitalize">{stage}</span>
+        <span className="text-xs text-white/30 bg-surface-dark rounded-md px-2 py-1">{contacts.length}</span>
+      </div>
+
+      <div className="p-3 space-y-3 flex-1 overflow-y-auto max-h-[600px]">
+        <SortableContext items={contacts.map(c => c.id)} strategy={verticalListSortingStrategy}>
+          {contacts.length === 0 ? (
+            <div className="text-center py-8 text-white/20 text-xs">
+              <p>No contacts</p>
+              <p className="text-white/10 text-xs mt-1">Drag contacts here</p>
+            </div>
+          ) : (
+            contacts.map(contact => (
+              <ContactCard key={contact.id} contact={contact} onEdit={onEdit} onDelete={onDelete} isAdmin={isAdmin} />
+            ))
+          )}
+        </SortableContext>
+      </div>
+    </div>
+  )
+}
+
 export function CrmPageNew() {
   const { user, organization } = useAuthStore()
   const { contacts, loading, fetchContacts, createContact, updateContact, deleteContact } =
@@ -211,7 +258,8 @@ export function CrmPageNew() {
   const [search, setSearch] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [editContact, setEditContact] = useState<CrmContact | null>(null)
-  const [draggedContact, setDraggedContact] = useState<CrmContact | null>(null)
+  const [activeContact, setActiveContact] = useState<CrmContact | null>(null)
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
   const [userRole, setUserRole] = useState<'admin' | 'employee' | null>(null)
   const [roleLoading, setRoleLoading] = useState(true)
@@ -353,28 +401,29 @@ export function CrmPageNew() {
     }
   }
 
-  const handleDragStart = (contact: CrmContact) => {
+  const handleDragStart = (event: DragStartEvent) => {
+    const contact = event.active.data.current?.contact as CrmContact | undefined
+    if (!contact) return
     if (userRole !== 'admin') return
-    setDraggedContact(contact)
+    setActiveContact(contact)
   }
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-  }
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event
+    setActiveContact(null)
+    if (!active || !over) return
+    const contact = active.data.current?.contact as CrmContact | undefined
+    const overData = over.data.current as any
+    if (!contact || !overData) return
 
-  const handleDrop = async (stage: CrmContact['stage']) => {
-    if (userRole !== 'admin') {
-      setDraggedContact(null)
-      return
-    }
-    if (!draggedContact || draggedContact.stage === stage) {
-      setDraggedContact(null)
-      return
-    }
+    let targetStage: CrmContact['stage'] | null = null
+    if (overData.type === 'stage') targetStage = overData.stage
+    else if (overData.type === 'contact') targetStage = overData.contact.stage
+
+    if (!targetStage || contact.stage === targetStage) return
     try {
-      await updateContact(draggedContact.id, { stage })
+      await updateContact(contact.id, { stage: targetStage })
       toast.success('Contact moved!')
-      setDraggedContact(null)
     } catch (error: any) {
       toast.error('Failed to update contact')
     }
@@ -417,113 +466,27 @@ export function CrmPageNew() {
 
       {/* Pipeline Board */}
       <div className="overflow-x-auto pb-4">
-        <div className="flex gap-4 min-w-max">
-          {STAGES.map((stage) => {
-            const stageCts = getStageContacts(stage)
-            return (
-              <div
-                key={stage}
-                onDragOver={handleDragOver}
-                onDrop={() => handleDrop(stage)}
-                className="w-80 bg-surface-1 border border-white/5 rounded-2xl flex flex-col hover:border-white/10 transition"
-              >
-                {/* Stage Header */}
-                <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
-                  <span className="text-sm font-semibold text-white capitalize">{stage}</span>
-                  <span className="text-xs text-white/30 bg-surface-dark rounded-md px-2 py-1">
-                    {stageCts.length}
-                  </span>
-                </div>
+        <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+          <div className="flex gap-4 min-w-max p-6">
+            {STAGES.map((stage) => {
+              const stageCts = getStageContacts(stage)
+              return (
+                <StageColumn
+                  key={stage}
+                  stage={stage}
+                  contacts={stageCts}
+                  isAdmin={userRole === 'admin'}
+                  onEdit={(c: CrmContact) => { setEditContact(c); setShowModal(true) }}
+                  onDelete={handleDelete}
+                />
+              )
+            })}
+          </div>
 
-                {/* Contacts */}
-                <div className="p-3 space-y-3 flex-1 overflow-y-auto max-h-[600px]">
-                  {stageCts.length === 0 ? (
-                    <div className="text-center py-8 text-white/20 text-xs">
-                      <p>No contacts</p>
-                      <p className="text-white/10 text-xs mt-1">Drag contacts here</p>
-                    </div>
-                  ) : (
-                    stageCts.map((contact) => (
-                      <div
-                          key={contact.id}
-                          draggable={userRole === 'admin'}
-                          onDragStart={() => userRole === 'admin' && handleDragStart(contact)}
-                          className={`bg-surface-2 border border-white/5 rounded-xl p-3.5 hover:border-white/10 transition ${userRole === 'admin' ? 'cursor-grab active:cursor-grabbing' : ''} group ${
-                            draggedContact?.id === contact.id ? 'opacity-50' : ''
-                          }`}
-                        >
-                        <div className="flex items-start gap-2 mb-2">
-                          <GripVertical size={14} className="text-white/10 group-hover:text-white/30 flex-shrink-0 mt-0.5" />
-                          <div className="flex-1 min-w-0">
-                            <h3 className="font-medium text-sm text-white truncate">{contact.name}</h3>
-                          </div>
-                              <div className="relative flex-shrink-0">
-                                <button
-                                  onClick={() => setMenuOpen(menuOpen === contact.id ? null : contact.id)}
-                                  className="opacity-0 group-hover:opacity-100 text-white/40 hover:text-white transition p-0.5"
-                                >
-                                  <MoreHorizontal size={14} />
-                                </button>
-                                {menuOpen === contact.id && (
-                                  <div className="absolute right-0 top-6 bg-surface-3 border border-white/10 rounded-xl shadow-xl z-20 min-w-[120px]">
-                                    {userRole === 'admin' && (
-                                      <>
-                                        <button
-                                          onClick={() => {
-                                            setEditContact(contact)
-                                            setShowModal(true)
-                                            setMenuOpen(null)
-                                          }}
-                                          className="flex items-center gap-2 w-full px-3 py-2 text-xs text-white/60 hover:text-white hover:bg-white/5 transition"
-                                        >
-                                          <Edit3 size={12} />
-                                          Edit
-                                        </button>
-                                        <button
-                                          onClick={() => handleDelete(contact.id)}
-                                          className="flex items-center gap-2 w-full px-3 py-2 text-xs text-red-400/60 hover:text-red-400 hover:bg-red-500/10 transition"
-                                        >
-                                          <Trash2 size={12} />
-                                          Delete
-                                        </button>
-                                      </>
-                                    )}
-                                    {userRole !== 'admin' && (
-                                      <div className="px-3 py-2 text-xs text-white/40">Admins only</div>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                        </div>
-
-                        {contact.company && (
-                          <div className="flex items-center gap-1.5 text-xs text-white/40 mb-1.5 ml-5">
-                            <Building2 size={12} />
-                            {contact.company}
-                          </div>
-                        )}
-
-                        {contact.email && (
-                          <div className="flex items-center gap-1.5 text-xs text-white/40 mb-1.5 ml-5">
-                            <Mail size={12} />
-                            {contact.email}
-                          </div>
-                        )}
-
-                        {contact.phone && (
-                          <div className="flex items-center gap-1.5 text-xs text-white/40 ml-5">
-                            <Phone size={12} />
-                            {contact.phone}
-                          </div>
-                        )}
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            )
-          })}
-        </div>
+          <DragOverlay>
+            {activeContact && <ContactCardOverlay contact={activeContact} />}
+          </DragOverlay>
+        </DndContext>
       </div>
 
       {/* Modal */}
