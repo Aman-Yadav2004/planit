@@ -97,6 +97,7 @@ function CreateTaskForm({ boardId, boards, assigneeOptions, onSave, existingTask
         <label className="block text-xs text-white/40 mb-1.5">Title * ({title.length}/100)</label>
         <input 
           value={title} 
+          maxLength={100}
           onChange={e => {
             setTitle(e.target.value.slice(0, 100))
             if (errors.title) setErrors({ ...errors, title: '' })
@@ -111,6 +112,7 @@ function CreateTaskForm({ boardId, boards, assigneeOptions, onSave, existingTask
         <label className="block text-xs text-white/40 mb-1.5">Description ({description.length}/500)</label>
         <textarea 
           value={description} 
+          maxLength={500}
           onChange={e => {
             setDescription(e.target.value.slice(0, 500))
             if (errors.description) setErrors({ ...errors, description: '' })
@@ -138,12 +140,7 @@ function CreateTaskForm({ boardId, boards, assigneeOptions, onSave, existingTask
           />
           {errors.dueDate && <p className="text-red-400 text-xs mt-1">{errors.dueDate}</p>}
         </div>
-        <div>
-          <label className="block text-xs text-white/40 mb-1.5">Column</label>
-          <select value={selectedBoardId} onChange={e => setSelectedBoardId(e.target.value)} className="input">
-            {boards.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-          </select>
-        </div>
+        {/* Column selection removed from task creation form; tasks are created in the selected board by default */}
         <div className="col-span-2">
           <label className="block text-xs text-white/40 mb-1.5">Assign To</label>
           <AssigneePicker

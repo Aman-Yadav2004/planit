@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react'
 import { Plus, Search, Phone, Mail, Building2, MoreHorizontal, Trash2, Edit3, GripVertical, X } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
+import { supabase } from '../lib/supabase'
 import { useCrmStore } from '../store/crmStore'
 import { Modal } from '../components/ui/Modal'
 import { EmptyState } from '../components/ui/EmptyState'
 import { toast } from '../components/ui/Toast'
 import type { CrmContact } from '../types/supabase'
+import { AssigneePicker, AssigneeOption } from '../components/tasks/AssigneePicker'
 
 const STAGES: CrmContact['stage'][] = ['lead', 'contacted', 'qualified', 'proposal', 'converted', 'lost']
 
@@ -14,18 +16,19 @@ function ContactForm({
   onSave,
   onCancel,
   existingContacts = [],
+  assigneeOptions = [],
 }: {
   initial?: Partial<CrmContact>
   onSave: (data: Partial<CrmContact>) => void
   onCancel: () => void
   existingContacts?: CrmContact[]
+  assigneeOptions?: AssigneeOption[]
 }) {
   const [form, setForm] = useState({
     name: initial?.name || '',
     email: initial?.email || '',
     phone: initial?.phone || '',
     company: initial?.company || '',
-    stage: initial?.stage || ('lead' as CrmContact['stage']),
     notes: initial?.notes || '',
     assigned_to: initial?.assigned_to || '',
   })
@@ -39,8 +42,9 @@ function ContactForm({
 
   const validatePhone = (phone: string): boolean => {
     if (!phone) return true
-    const phoneRegex = /^[0-9+\-\s()]*$/ 
-    return phoneRegex.test(phone) && phone.replace(/\D/g, '').length >= 10
+    const digits = phone.replace(/\D/g, '')
+    const phoneRegex = /^[0-9]*$/
+    return phoneRegex.test(digits) && digits.length >= 10
   }
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -83,9 +87,6 @@ function ContactForm({
       newErrors.notes = 'Notes must be 500 characters or less'
     }
 
-    if (form.assigned_to && form.assigned_to.length > 100) {
-      newErrors.assigned_to = 'Assigned to must be 100 characters or less'
-    }
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors)
@@ -102,88 +103,84 @@ function ContactForm({
         <div className="col-span-2">
           <label className="block text-xs text-white/40 mb-1.5">Name * ({form.name.length}/100)</label>
           <input
-            value={form.name}
-            onChange={(e) => {
-              setForm({ ...form, name: e.target.value.slice(0, 100) })
-              if (errors.name) setErrors({ ...errors, name: '' })
-            }}
-            className={`input ${errors.name ? 'border-red-400/50' : ''}`}
-            placeholder="John Smith"
-            required
+              value={form.name}
+              maxLength={100}
+              onChange={(e) => {
+                setForm({ ...form, name: e.target.value.slice(0, 100) })
+                if (errors.name) setErrors({ ...errors, name: '' })
+              }}
+              className={`input ${errors.name ? 'border-red-400/50' : ''}`}
+              placeholder="John Smith"
+              required
           />
           {errors.name && <p className="text-red-400 text-xs mt-1">{errors.name}</p>}
         </div>
         <div>
           <label className="block text-xs text-white/40 mb-1.5">Email ({form.email.length}/150)</label>
           <input
-            type="email"
-            value={form.email}
-            onChange={(e) => {
-              setForm({ ...form, email: e.target.value.slice(0, 150) })
-              if (errors.email) setErrors({ ...errors, email: '' })
-            }}
-            className={`input ${errors.email ? 'border-red-400/50' : ''}`}
-            placeholder="john@company.com"
+              type="email"
+              value={form.email}
+              maxLength={150}
+              onChange={(e) => {
+                setForm({ ...form, email: e.target.value.slice(0, 150) })
+                if (errors.email) setErrors({ ...errors, email: '' })
+              }}
+              className={`input ${errors.email ? 'border-red-400/50' : ''}`}
+              placeholder="john@company.com"
           />
           {errors.email && <p className="text-red-400 text-xs mt-1">{errors.email}</p>}
         </div>
         <div>
           <label className="block text-xs text-white/40 mb-1.5">Phone ({form.phone.length}/20)</label>
-          <input
-            value={form.phone}
-            onChange={(e) => {
-              setForm({ ...form, phone: e.target.value.slice(0, 20) })
-              if (errors.phone) setErrors({ ...errors, phone: '' })
-            }}
-            className={`input ${errors.phone ? 'border-red-400/50' : ''}`}
-            placeholder="+1 234 567 890"
-          />
+            <input
+              type="tel"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={form.phone}
+              maxLength={20}
+              onChange={(e) => {
+                const digits = e.target.value.replace(/\D/g, '').slice(0, 20)
+                setForm({ ...form, phone: digits })
+                if (errors.phone) setErrors({ ...errors, phone: '' })
+              }}
+              className={`input ${errors.phone ? 'border-red-400/50' : ''}`}
+              placeholder="1234567890"
+            />
           {errors.phone && <p className="text-red-400 text-xs mt-1">{errors.phone}</p>}
         </div>
         <div>
           <label className="block text-xs text-white/40 mb-1.5">Company ({form.company.length}/100)</label>
-          <input
-            value={form.company}
-            onChange={(e) => {
-              setForm({ ...form, company: e.target.value.slice(0, 100) })
-              if (errors.company) setErrors({ ...errors, company: '' })
-            }}
-            className={`input ${errors.company ? 'border-red-400/50' : ''}`}
-            placeholder="Acme Inc"
-          />
+            <input
+              value={form.company}
+              maxLength={100}
+              onChange={(e) => {
+                setForm({ ...form, company: e.target.value.slice(0, 100) })
+                if (errors.company) setErrors({ ...errors, company: '' })
+              }}
+              className={`input ${errors.company ? 'border-red-400/50' : ''}`}
+              placeholder="Acme Inc"
+            />
           {errors.company && <p className="text-red-400 text-xs mt-1">{errors.company}</p>}
         </div>
-        <div>
-          <label className="block text-xs text-white/40 mb-1.5">Stage</label>
-          <select
-            value={form.stage}
-            onChange={(e) => setForm({ ...form, stage: e.target.value as CrmContact['stage'] })}
-            className="input"
-          >
-            {STAGES.map((s) => (
-              <option key={s} value={s}>
-                {s.charAt(0).toUpperCase() + s.slice(1)}
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* Stage is managed by the pipeline; removed manual stage selection from the add/edit contact form */}
         <div className="col-span-2">
-          <label className="block text-xs text-white/40 mb-1.5">Assign To ({form.assigned_to.length}/100)</label>
-          <input
-            value={form.assigned_to}
-            onChange={(e) => {
-              setForm({ ...form, assigned_to: e.target.value.slice(0, 100) })
+          <label className="block text-xs text-white/40 mb-1.5">Assign To</label>
+          <AssigneePicker
+            options={assigneeOptions}
+            selectedValue={form.assigned_to || null}
+            onChange={(val) => {
+              setForm({ ...form, assigned_to: val || '' })
               if (errors.assigned_to) setErrors({ ...errors, assigned_to: '' })
             }}
-            className={`input ${errors.assigned_to ? 'border-red-400/50' : ''}`}
-            placeholder="Team member name or email"
           />
+          <p className="text-xs text-white/30 mt-1.5">Search and select a teammate to assign this contact to.</p>
           {errors.assigned_to && <p className="text-red-400 text-xs mt-1">{errors.assigned_to}</p>}
         </div>
         <div className="col-span-2">
           <label className="block text-xs text-white/40 mb-1.5">Notes ({form.notes.length}/500)</label>
           <textarea
             value={form.notes}
+            maxLength={500}
             onChange={(e) => {
               setForm({ ...form, notes: e.target.value.slice(0, 500) })
               if (errors.notes) setErrors({ ...errors, notes: '' })
@@ -216,12 +213,84 @@ export function CrmPageNew() {
   const [editContact, setEditContact] = useState<CrmContact | null>(null)
   const [draggedContact, setDraggedContact] = useState<CrmContact | null>(null)
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
+  const [userRole, setUserRole] = useState<'admin' | 'employee' | null>(null)
+  const [roleLoading, setRoleLoading] = useState(true)
+  const [assigneeOptions, setAssigneeOptions] = useState<AssigneeOption[]>([])
 
   useEffect(() => {
     if (organization) {
       fetchContacts(organization.id)
     }
   }, [organization?.id, fetchContacts])
+
+  useEffect(() => {
+    if (!organization || !user) return
+    setRoleLoading(true)
+    ;(async () => {
+      try {
+        const { data, error } = await supabase
+          .from('memberships')
+          .select('role')
+          .eq('organization_id', organization.id)
+          .eq('user_id', user.id)
+          .maybeSingle()
+
+        if (!error && data) setUserRole(data.role)
+        else setUserRole('employee')
+      } catch (e) {
+        console.error('Failed to fetch role', e)
+        setUserRole('employee')
+      } finally {
+        setRoleLoading(false)
+      }
+    })()
+  }, [organization?.id, user?.id])
+
+  useEffect(() => {
+    if (!organization?.id) return
+
+    const loadAssigneeOptions = async () => {
+      const [membersResult, invitationsResult] = await Promise.all([
+        supabase
+          .from('memberships')
+          .select('id, user_id, role, profile:user_id(*)')
+          .eq('organization_id', organization.id),
+        supabase
+          .from('invitations')
+          .select('id, email, role, accepted')
+          .eq('organization_id', organization.id)
+          .eq('accepted', false),
+      ])
+
+      const memberOptions: AssigneeOption[] = (membersResult.data || [])
+        .map((membership: any) => {
+          const profile = Array.isArray(membership.profile) ? membership.profile[0] : membership.profile
+          if (!profile?.id) return null
+
+          return {
+            id: membership.id,
+            value: profile.id,
+            label: profile.full_name || profile.email,
+            secondary: `${profile.email} • ${membership.role}`,
+            status: 'member',
+          } satisfies AssigneeOption
+        })
+        .filter(Boolean) as AssigneeOption[]
+
+      const invitationOptions: AssigneeOption[] = (invitationsResult.data || []).map((invite: any) => ({
+        id: invite.id,
+        value: `invite:${invite.id}`,
+        label: invite.email,
+        secondary: `Invited • ${invite.role}`,
+        status: 'invited',
+        disabled: true,
+      }))
+
+      setAssigneeOptions([...memberOptions, ...invitationOptions])
+    }
+
+    loadAssigneeOptions()
+  }, [organization?.id])
 
   const filtered = contacts.filter((c) => {
     if (!search) return true
@@ -242,11 +311,17 @@ export function CrmPageNew() {
       return
     }
     try {
-      await createContact({
+      const { contact, error } = await createContact({
         ...data,
         organization_id: organization.id,
         created_by: user.id,
       } as any)
+
+      if (error) {
+        toast.error(error)
+        return
+      }
+
       toast.success('Contact added!')
       setShowModal(false)
     } catch (error: any) {
@@ -279,6 +354,7 @@ export function CrmPageNew() {
   }
 
   const handleDragStart = (contact: CrmContact) => {
+    if (userRole !== 'admin') return
     setDraggedContact(contact)
   }
 
@@ -287,6 +363,10 @@ export function CrmPageNew() {
   }
 
   const handleDrop = async (stage: CrmContact['stage']) => {
+    if (userRole !== 'admin') {
+      setDraggedContact(null)
+      return
+    }
     if (!draggedContact || draggedContact.stage === stage) {
       setDraggedContact(null)
       return
@@ -365,48 +445,55 @@ export function CrmPageNew() {
                   ) : (
                     stageCts.map((contact) => (
                       <div
-                        key={contact.id}
-                        draggable
-                        onDragStart={() => handleDragStart(contact)}
-                        className={`bg-surface-2 border border-white/5 rounded-xl p-3.5 hover:border-white/10 transition cursor-grab active:cursor-grabbing group ${
-                          draggedContact?.id === contact.id ? 'opacity-50' : ''
-                        }`}
-                      >
+                          key={contact.id}
+                          draggable={userRole === 'admin'}
+                          onDragStart={() => userRole === 'admin' && handleDragStart(contact)}
+                          className={`bg-surface-2 border border-white/5 rounded-xl p-3.5 hover:border-white/10 transition ${userRole === 'admin' ? 'cursor-grab active:cursor-grabbing' : ''} group ${
+                            draggedContact?.id === contact.id ? 'opacity-50' : ''
+                          }`}
+                        >
                         <div className="flex items-start gap-2 mb-2">
                           <GripVertical size={14} className="text-white/10 group-hover:text-white/30 flex-shrink-0 mt-0.5" />
                           <div className="flex-1 min-w-0">
                             <h3 className="font-medium text-sm text-white truncate">{contact.name}</h3>
                           </div>
-                          <div className="relative flex-shrink-0">
-                            <button
-                              onClick={() => setMenuOpen(menuOpen === contact.id ? null : contact.id)}
-                              className="opacity-0 group-hover:opacity-100 text-white/40 hover:text-white transition p-0.5"
-                            >
-                              <MoreHorizontal size={14} />
-                            </button>
-                            {menuOpen === contact.id && (
-                              <div className="absolute right-0 top-6 bg-surface-3 border border-white/10 rounded-xl shadow-xl z-20 min-w-[120px]">
+                              <div className="relative flex-shrink-0">
                                 <button
-                                  onClick={() => {
-                                    setEditContact(contact)
-                                    setShowModal(true)
-                                    setMenuOpen(null)
-                                  }}
-                                  className="flex items-center gap-2 w-full px-3 py-2 text-xs text-white/60 hover:text-white hover:bg-white/5 transition"
+                                  onClick={() => setMenuOpen(menuOpen === contact.id ? null : contact.id)}
+                                  className="opacity-0 group-hover:opacity-100 text-white/40 hover:text-white transition p-0.5"
                                 >
-                                  <Edit3 size={12} />
-                                  Edit
+                                  <MoreHorizontal size={14} />
                                 </button>
-                                <button
-                                  onClick={() => handleDelete(contact.id)}
-                                  className="flex items-center gap-2 w-full px-3 py-2 text-xs text-red-400/60 hover:text-red-400 hover:bg-red-500/10 transition"
-                                >
-                                  <Trash2 size={12} />
-                                  Delete
-                                </button>
+                                {menuOpen === contact.id && (
+                                  <div className="absolute right-0 top-6 bg-surface-3 border border-white/10 rounded-xl shadow-xl z-20 min-w-[120px]">
+                                    {userRole === 'admin' && (
+                                      <>
+                                        <button
+                                          onClick={() => {
+                                            setEditContact(contact)
+                                            setShowModal(true)
+                                            setMenuOpen(null)
+                                          }}
+                                          className="flex items-center gap-2 w-full px-3 py-2 text-xs text-white/60 hover:text-white hover:bg-white/5 transition"
+                                        >
+                                          <Edit3 size={12} />
+                                          Edit
+                                        </button>
+                                        <button
+                                          onClick={() => handleDelete(contact.id)}
+                                          className="flex items-center gap-2 w-full px-3 py-2 text-xs text-red-400/60 hover:text-red-400 hover:bg-red-500/10 transition"
+                                        >
+                                          <Trash2 size={12} />
+                                          Delete
+                                        </button>
+                                      </>
+                                    )}
+                                    {userRole !== 'admin' && (
+                                      <div className="px-3 py-2 text-xs text-white/40">Admins only</div>
+                                    )}
+                                  </div>
+                                )}
                               </div>
-                            )}
-                          </div>
                         </div>
 
                         {contact.company && (
@@ -456,6 +543,7 @@ export function CrmPageNew() {
             setEditContact(null)
           }}
           existingContacts={contacts}
+          assigneeOptions={assigneeOptions}
         />
       </Modal>
     </div>

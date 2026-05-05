@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Plus, FolderKanban, Trash2, MoreHorizontal, Edit3 } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 import { useProjectsStore } from '../store/projectsStore'
+import { supabase } from '../lib/supabase'
 import { Modal } from '../components/ui/Modal'
 import { EmptyState } from '../components/ui/EmptyState'
 import { toast } from '../components/ui/Toast'
@@ -59,6 +60,8 @@ function ProjectForm({ onSave, initial }: {
 export function ProjectsPage() {
   const { user, organization } = useAuthStore()
   const { projects, loading, fetchProjects, createProject, updateProject, deleteProject } = useProjectsStore()
+  const [userRole, setUserRole] = useState<'admin' | 'employee' | null>(null)
+  const [roleLoading, setRoleLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editingProject, setEditingProject] = useState<Project | null>(null)
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
@@ -66,6 +69,29 @@ export function ProjectsPage() {
   useEffect(() => {
     if (organization) fetchProjects(organization.id)
   }, [organization?.id])
+
+  useEffect(() => {
+    if (!organization || !user) return
+    setRoleLoading(true)
+    ;(async () => {
+      try {
+        const { data, error } = await supabase
+          .from('memberships')
+          .select('role')
+          .eq('organization_id', organization.id)
+          .eq('user_id', user.id)
+          .maybeSingle()
+
+        if (!error && data) setUserRole(data.role)
+        else setUserRole('employee')
+      } catch (e) {
+        console.error('Failed to fetch role', e)
+        setUserRole('employee')
+      } finally {
+        setRoleLoading(false)
+      }
+    })()
+  }, [organization?.id, user?.id])
 
   const handleCreate = async ({ name, description, color }: { name: string; description: string; color: string }) => {
     if (!user || !organization) return
@@ -95,9 +121,11 @@ export function ProjectsPage() {
           <h1 className="text-xl font-bold text-white">Projects</h1>
           <p className="text-white/40 text-sm mt-0.5">{projects.length} project{projects.length !== 1 ? 's' : ''}</p>
         </div>
-        <button onClick={() => setShowModal(true)} className="btn-primary flex items-center gap-2">
-          <Plus size={15} /> New Project
-        </button>
+        {userRole === 'admin' && (
+          <button onClick={() => setShowModal(true)} className="btn-primary flex items-center gap-2">
+            <Plus size={15} /> New Project
+          </button>
+        )}
       </div>
 
       {loading ? (
@@ -122,24 +150,30 @@ export function ProjectsPage() {
                     <FolderKanban size={18} style={{ color: project.color }} className="flex-shrink-0" />
                     <h3 className="font-semibold text-white truncate hover:text-brand-300 transition-colors">{project.name}</h3>
                   </Link>
-                  <div className="relative flex-shrink-0">
-                    <button
-                      onClick={() => setMenuOpen(menuOpen === project.id ? null : project.id)}
-                      className="btn-ghost p-1.5 opacity-0 group-hover:opacity-100"
-                    >
-                      <MoreHorizontal size={15} />
-                    </button>
-                    {menuOpen === project.id && (
-                      <div className="absolute right-0 top-8 bg-surface-3 border border-white/10 rounded-xl shadow-xl z-10 py-1 min-w-[130px]">
-                        <button onClick={() => { setEditingProject(project); setMenuOpen(null) }} className="flex items-center gap-2 w-full px-3 py-2 text-sm text-white/60 hover:text-white hover:bg-white/5">
-                          <Edit3 size={14} /> Edit
-                        </button>
-                        <button onClick={() => handleDelete(project.id)} className="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-400 hover:bg-red-500/10">
-                          <Trash2 size={14} /> Delete
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                    <div className="relative flex-shrink-0">
+                      <button
+                        onClick={() => setMenuOpen(menuOpen === project.id ? null : project.id)}
+                        className="btn-ghost p-1.5 opacity-0 group-hover:opacity-100"
+                      >
+                        <MoreHorizontal size={15} />
+                      </button>
+                      {menuOpen === project.id && (
+                        <div className="absolute right-0 top-8 bg-surface-3 border border-white/10 rounded-xl shadow-xl z-10 py-1 min-w-[130px]">
+                          {userRole === 'admin' ? (
+                            <>
+                              <button onClick={() => { setEditingProject(project); setMenuOpen(null) }} className="flex items-center gap-2 w-full px-3 py-2 text-sm text-white/60 hover:text-white hover:bg-white/5">
+                                <Edit3 size={14} /> Edit
+                              </button>
+                              <button onClick={() => handleDelete(project.id)} className="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-400 hover:bg-red-500/10">
+                                <Trash2 size={14} /> Delete
+                              </button>
+                            </>
+                          ) : (
+                            <div className="px-3 py-2 text-xs text-white/40">Admins only</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                 </div>
                 {project.description && (
                   <p className="text-white/40 text-sm line-clamp-2 mb-4">{project.description}</p>

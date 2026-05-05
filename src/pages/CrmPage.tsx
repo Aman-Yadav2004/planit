@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Plus, Search, Phone, Mail, Building2, MoreHorizontal, Trash2, Edit3, TrendingUp } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
+import { supabase } from '../lib/supabase'
 import { useCrmStore } from '../store/crmStore'
 import { Modal } from '../components/ui/Modal'
 import { StageBadge } from '../components/ui/Badges'
@@ -19,7 +20,6 @@ function ContactForm({ initial, onSave }: {
     email: initial?.email || '',
     phone: initial?.phone || '',
     company: initial?.company || '',
-    stage: initial?.stage || 'lead' as CrmContact['stage'],
     notes: initial?.notes || '',
   })
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }))
@@ -29,29 +29,24 @@ function ContactForm({ initial, onSave }: {
       <div className="grid grid-cols-2 gap-4">
         <div className="col-span-2">
           <label className="block text-xs text-white/40 mb-1.5">Name *</label>
-          <input value={form.name} onChange={e => set('name', e.target.value)} className="input" placeholder="John Smith" />
+          <input value={form.name} maxLength={100} onChange={e => set('name', e.target.value.slice(0,100))} className="input" placeholder="John Smith" />
         </div>
         <div>
           <label className="block text-xs text-white/40 mb-1.5">Email</label>
-          <input type="email" value={form.email} onChange={e => set('email', e.target.value)} className="input" placeholder="john@company.com" />
+          <input type="email" value={form.email} maxLength={150} onChange={e => set('email', e.target.value.slice(0,150))} className="input" placeholder="john@company.com" />
         </div>
         <div>
           <label className="block text-xs text-white/40 mb-1.5">Phone</label>
-          <input value={form.phone} onChange={e => set('phone', e.target.value)} className="input" placeholder="+1 234 567 890" />
+          <input type="tel" inputMode="numeric" pattern="[0-9]*" value={form.phone} maxLength={20} onChange={e => set('phone', e.target.value.replace(/\D/g, '').slice(0,20))} className="input" placeholder="1234567890" />
         </div>
         <div>
           <label className="block text-xs text-white/40 mb-1.5">Company</label>
-          <input value={form.company} onChange={e => set('company', e.target.value)} className="input" placeholder="Acme Inc" />
+          <input value={form.company} maxLength={100} onChange={e => set('company', e.target.value.slice(0,100))} className="input" placeholder="Acme Inc" />
         </div>
-        <div>
-          <label className="block text-xs text-white/40 mb-1.5">Stage</label>
-          <select value={form.stage} onChange={e => set('stage', e.target.value)} className="input">
-            {STAGES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>)}
-          </select>
-        </div>
+        {/* Stage is set automatically by the system; removed manual stage selection from the form */}
         <div className="col-span-2">
           <label className="block text-xs text-white/40 mb-1.5">Notes</label>
-          <textarea value={form.notes} onChange={e => set('notes', e.target.value)} className="input min-h-[70px] resize-none" placeholder="Add any notes..." />
+          <textarea value={form.notes} maxLength={500} onChange={e => set('notes', e.target.value.slice(0,500))} className="input min-h-[70px] resize-none" placeholder="Add any notes..." />
         </div>
       </div>
       <div className="flex justify-end">
@@ -66,6 +61,8 @@ function ContactForm({ initial, onSave }: {
 export function CrmPage() {
   const { user, organization } = useAuthStore()
   const { contacts, loading, fetchContacts, createContact, updateContact, deleteContact } = useCrmStore()
+  const [userRole, setUserRole] = useState<'admin' | 'employee' | null>(null)
+  const [roleLoading, setRoleLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filterStage, setFilterStage] = useState<string>('all')
   const [showModal, setShowModal] = useState(false)
@@ -77,6 +74,29 @@ export function CrmPage() {
     if (organization) fetchContacts(organization.id)
   }, [organization?.id])
 
+  useEffect(() => {
+    if (!organization || !user) return
+    setRoleLoading(true)
+    ;(async () => {
+      try {
+        const { data, error } = await supabase
+          .from('memberships')
+          .select('role')
+          .eq('organization_id', organization.id)
+          .eq('user_id', user.id)
+          .maybeSingle()
+
+        if (!error && data) setUserRole(data.role)
+        else setUserRole('employee')
+      } catch (e) {
+        console.error('Failed to fetch role', e)
+        setUserRole('employee')
+      } finally {
+        setRoleLoading(false)
+      }
+    })()
+  }, [organization?.id, user?.id])
+
   const filtered = contacts.filter(c => {
     const q = search.toLowerCase()
     const matchSearch = !q || c.name.toLowerCase().includes(q) || c.email?.toLowerCase().includes(q) || c.company?.toLowerCase().includes(q)
@@ -86,9 +106,10 @@ export function CrmPage() {
 
   const handleCreate = async (data: Partial<CrmContact>) => {
     if (!user || !organization) return
-    const contact = await createContact({ ...data, organization_id: organization.id, created_by: user.id } as any)
-    if (contact) { toast.success('Contact added!'); setShowModal(false) }
-    else toast.error('Failed to add contact')
+    const { contact, error } = await createContact({ ...data, organization_id: organization.id, created_by: user.id } as any)
+    if (error) { toast.error(error); return }
+    toast.success('Contact added!')
+    setShowModal(false)
   }
 
   const handleUpdate = async (data: Partial<CrmContact>) => {
@@ -181,12 +202,18 @@ export function CrmPage() {
                             </button>
                             {menuOpen === contact.id && (
                               <div className="absolute right-0 top-6 bg-surface-3 border border-white/10 rounded-xl shadow-xl z-20 py-1 min-w-[120px]">
-                                <button onClick={() => { setEditContact(contact); setMenuOpen(null) }} className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-white/60 hover:text-white hover:bg-white/5">
-                                  <Edit3 size={12} /> Edit
-                                </button>
-                                <button onClick={() => handleDelete(contact.id)} className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/10">
-                                  <Trash2 size={12} /> Delete
-                                </button>
+                                {userRole === 'admin' ? (
+                                  <>
+                                    <button onClick={() => { setEditContact(contact); setMenuOpen(null) }} className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-white/60 hover:text-white hover:bg-white/5">
+                                      <Edit3 size={12} /> Edit
+                                    </button>
+                                    <button onClick={() => handleDelete(contact.id)} className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/10">
+                                      <Trash2 size={12} /> Delete
+                                    </button>
+                                  </>
+                                ) : (
+                                  <div className="px-3 py-2 text-xs text-white/40">Admins only</div>
+                                )}
                               </div>
                             )}
                           </div>

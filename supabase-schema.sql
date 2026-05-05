@@ -171,6 +171,37 @@ CREATE TABLE IF NOT EXISTS public.crm_contacts (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Sanitize phone input (strip non-digits) before storage to avoid UUID/format errors
+CREATE OR REPLACE FUNCTION public.sanitize_phone()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.phone IS NOT NULL THEN
+    NEW.phone := regexp_replace(NEW.phone, '\\D', '', 'g');
+    IF NEW.phone = '' THEN
+      NEW.phone := NULL;
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS sanitize_phone_trigger ON public.crm_contacts;
+CREATE TRIGGER sanitize_phone_trigger
+  BEFORE INSERT OR UPDATE ON public.crm_contacts
+  FOR EACH ROW EXECUTE FUNCTION public.sanitize_phone();
+
+-- Enforce only digits in phone, length limits for name and email format/length
+ALTER TABLE public.crm_contacts
+  ADD CONSTRAINT crm_contacts_phone_digits_check CHECK (phone IS NULL OR phone ~ '^[0-9]+$');
+
+ALTER TABLE public.crm_contacts
+  ADD CONSTRAINT crm_contacts_name_length_check CHECK (char_length(name) <= 100);
+
+ALTER TABLE public.crm_contacts
+  ADD CONSTRAINT crm_contacts_email_length_and_format_check CHECK (
+    email IS NULL OR (char_length(email) <= 150 AND email LIKE '%@%.%')
+  );
+
 -- =============================================
 -- DEALS
 -- =============================================
@@ -372,8 +403,8 @@ CREATE POLICY "Admins can delete invitations" ON public.invitations FOR DELETE U
 
 -- PROJECTS policies
 CREATE POLICY "Org members can view projects" ON public.projects FOR SELECT USING (public.is_org_member(organization_id));
-CREATE POLICY "Org members can create projects" ON public.projects FOR INSERT WITH CHECK (public.is_org_member(organization_id));
-CREATE POLICY "Org members can update projects" ON public.projects FOR UPDATE USING (public.is_org_member(organization_id));
+CREATE POLICY "Org admins can create projects" ON public.projects FOR INSERT WITH CHECK (public.is_org_admin(organization_id));
+CREATE POLICY "Org admins can update projects" ON public.projects FOR UPDATE USING (public.is_org_admin(organization_id));
 CREATE POLICY "Org admins can delete projects" ON public.projects FOR DELETE USING (public.is_org_admin(organization_id));
 
 -- BOARDS policies
@@ -391,11 +422,12 @@ CREATE POLICY "Project members can view tasks" ON public.tasks FOR SELECT USING 
 CREATE POLICY "Project members can create tasks" ON public.tasks FOR INSERT WITH CHECK (
   EXISTS (SELECT 1 FROM public.projects p WHERE p.id = project_id AND public.is_org_member(p.organization_id))
 );
-CREATE POLICY "Project members can update tasks" ON public.tasks FOR UPDATE USING (
-  EXISTS (SELECT 1 FROM public.projects p WHERE p.id = project_id AND public.is_org_member(p.organization_id))
+CREATE POLICY "Task assignee or admin can update" ON public.tasks FOR UPDATE USING (
+  assignee_id = auth.uid() OR
+  EXISTS (SELECT 1 FROM public.projects p WHERE p.id = project_id AND public.is_org_admin(p.organization_id))
 );
-CREATE POLICY "Task creator or admin can delete" ON public.tasks FOR DELETE USING (
-  created_by = auth.uid() OR
+CREATE POLICY "Task assignee or admin can delete" ON public.tasks FOR DELETE USING (
+  assignee_id = auth.uid() OR
   EXISTS (SELECT 1 FROM public.projects p WHERE p.id = project_id AND public.is_org_admin(p.organization_id))
 );
 
@@ -413,8 +445,8 @@ CREATE POLICY "Comment owners can delete" ON public.comments FOR DELETE USING (u
 -- CRM CONTACTS policies
 CREATE POLICY "Org members can view contacts" ON public.crm_contacts FOR SELECT USING (public.is_org_member(organization_id));
 CREATE POLICY "Org members can create contacts" ON public.crm_contacts FOR INSERT WITH CHECK (public.is_org_member(organization_id));
-CREATE POLICY "Org members can update contacts" ON public.crm_contacts FOR UPDATE USING (public.is_org_member(organization_id));
-CREATE POLICY "Org admins can delete contacts" ON public.crm_contacts FOR DELETE USING (public.is_org_admin(organization_id) OR created_by = auth.uid());
+CREATE POLICY "Org admins can update contacts" ON public.crm_contacts FOR UPDATE USING (public.is_org_admin(organization_id));
+CREATE POLICY "Org admins can delete contacts" ON public.crm_contacts FOR DELETE USING (public.is_org_admin(organization_id));
 
 -- DEALS policies
 CREATE POLICY "Org members can view deals" ON public.deals FOR SELECT USING (public.is_org_member(organization_id));

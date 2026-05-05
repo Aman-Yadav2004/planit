@@ -84,12 +84,7 @@ function CreateTaskForm({ boardId, boards, assigneeOptions, onSave }: {
           />
           {dueDateError && <p className="text-red-400 text-xs mt-1">{dueDateError}</p>}
         </div>
-        <div>
-          <label className="block text-xs text-white/40 mb-1.5">Column</label>
-          <select value={selectedBoardId} onChange={e => setSelectedBoardId(e.target.value)} className="input">
-            {boards.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-          </select>
-        </div>
+        {/* Column selection removed from task creation form; tasks are created in the selected board by default */}
         <div className="col-span-2">
           <label className="block text-xs text-white/40 mb-1.5">Assign To</label>
           <AssigneePicker

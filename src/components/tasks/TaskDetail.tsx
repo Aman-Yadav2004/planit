@@ -29,6 +29,7 @@ export function TaskDetail({ task, onClose, boards }: TaskDetailProps) {
   const { user } = useAuthStore()
   const { updateTask, deleteTask } = useProjectsStore()
   const [editing, setEditing] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [priority, setPriority] = useState<Task['priority']>('medium')
@@ -70,6 +71,20 @@ export function TaskDetail({ task, onClose, boards }: TaskDetailProps) {
   const loadAssigneeOptions = async (projectId: string) => {
     const { data: project } = await supabase.from('projects').select('organization_id').eq('id', projectId).single()
     if (!project) return
+
+    // find current user's role in this project/org
+    try {
+      const { data: membership } = await supabase
+        .from('memberships')
+        .select('role')
+        .eq('organization_id', project.organization_id)
+        .eq('user_id', user?.id)
+        .maybeSingle()
+
+      setIsAdmin(membership?.role === 'admin')
+    } catch (e) {
+      setIsAdmin(false)
+    }
 
     const [membersResult, invitationsResult] = await Promise.all([
       supabase
@@ -128,6 +143,11 @@ export function TaskDetail({ task, onClose, boards }: TaskDetailProps) {
 
   const handleSave = async () => {
     if (!task) return
+    const canEditOrDelete = !!user && (user.id === task.assignee_id || isAdmin)
+    if (!canEditOrDelete) {
+      toast.error('Not authorized to edit this task')
+      return
+    }
     if (dueDate && isPastDueDate(dueDate)) {
       setDueDateError('Cannot set deadline to a past date')
       toast.error('Cannot set deadline to a past date')
@@ -145,6 +165,11 @@ export function TaskDetail({ task, onClose, boards }: TaskDetailProps) {
 
   const handleDelete = async () => {
     if (!task || !confirm('Delete this task?')) return
+    const canEditOrDelete = !!user && (user.id === task.assignee_id || isAdmin)
+    if (!canEditOrDelete) {
+      toast.error('Not authorized to delete this task')
+      return
+    }
     await deleteTask(task.id)
     toast.success('Task deleted')
     onClose()
@@ -174,11 +199,11 @@ export function TaskDetail({ task, onClose, boards }: TaskDetailProps) {
           <div className="space-y-4">
             <div>
               <label className="block text-xs text-white/40 mb-1">Title</label>
-              <input value={title} onChange={e => setTitle(e.target.value)} className="input" />
+              <input value={title} maxLength={100} onChange={e => setTitle(e.target.value.slice(0,100))} className="input" />
             </div>
             <div>
               <label className="block text-xs text-white/40 mb-1">Description</label>
-              <textarea value={description} onChange={e => setDescription(e.target.value)} className="input min-h-[80px] resize-none" />
+              <textarea value={description} maxLength={500} onChange={e => setDescription(e.target.value.slice(0,500))} className="input min-h-[80px] resize-none" />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -239,13 +264,17 @@ export function TaskDetail({ task, onClose, boards }: TaskDetailProps) {
                 </div>
               )}
             </div>
-            <div className="flex gap-2">
-              <button onClick={() => setEditing(true)} className="btn-ghost flex items-center gap-1.5 text-xs">
-                <Edit3 size={13} /> Edit
-              </button>
-              <button onClick={handleDelete} className="btn-ghost text-red-400 hover:text-red-300 flex items-center gap-1.5 text-xs">
-                <Trash2 size={13} /> Delete
-              </button>
+              <div className="flex gap-2">
+              {((user && user.id === task.assignee_id) || isAdmin) && (
+                <>
+                  <button onClick={() => setEditing(true)} className="btn-ghost flex items-center gap-1.5 text-xs">
+                    <Edit3 size={13} /> Edit
+                  </button>
+                  <button onClick={handleDelete} className="btn-ghost text-red-400 hover:text-red-300 flex items-center gap-1.5 text-xs">
+                    <Trash2 size={13} /> Delete
+                  </button>
+                </>
+              )}
             </div>
           </div>
         )}
