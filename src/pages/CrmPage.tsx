@@ -114,7 +114,8 @@ export function CrmPage() {
 
   const handleUpdate = async (data: Partial<CrmContact>) => {
     if (!editContact) return
-    await updateContact(editContact.id, data)
+    const { contact: updated, error } = await updateContact(editContact.id, data)
+    if (error) { toast.error(error); return }
     toast.success('Contact updated')
     setEditContact(null)
   }

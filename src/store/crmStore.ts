@@ -8,7 +8,7 @@ interface CrmState {
   error: string | null
   fetchContacts: (orgId: string) => Promise<void>
   createContact: (data: Omit<CrmContact, 'id' | 'created_at' | 'updated_at'>) => Promise<{ contact: CrmContact | null; error: string | null }>
-  updateContact: (id: string, data: Partial<CrmContact>) => Promise<void>
+  updateContact: (id: string, data: Partial<CrmContact>) => Promise<{ contact: CrmContact | null; error: string | null }>
   deleteContact: (id: string) => Promise<void>
 }
 
@@ -69,15 +69,25 @@ export const useCrmStore = create<CrmState>((set) => ({
   },
 
   updateContact: async (id, data) => {
-    const { data: updated } = await supabase
+    const { data: updated, error } = await supabase
       .from('crm_contacts')
       .update({ ...data, updated_at: new Date().toISOString() })
       .eq('id', id)
       .select()
       .single()
+
+    if (error) {
+      console.error('updateContact error:', error)
+      set({ error: error.message })
+      return { contact: null, error: error.message }
+    }
+
     if (updated) {
       set(state => ({ contacts: state.contacts.map(c => c.id === id ? updated : c) }))
+      return { contact: updated, error: null }
     }
+
+    return { contact: null, error: 'Update failed' }
   },
 
   deleteContact: async (id) => {

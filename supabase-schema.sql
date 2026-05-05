@@ -352,6 +352,7 @@ DROP POLICY IF EXISTS "Org members can view contacts" ON public.crm_contacts;
 DROP POLICY IF EXISTS "Org members can create contacts" ON public.crm_contacts;
 DROP POLICY IF EXISTS "Org members can update contacts" ON public.crm_contacts;
 DROP POLICY IF EXISTS "Org admins can delete contacts" ON public.crm_contacts;
+DROP POLICY IF EXISTS "Org admins or assignee can update contacts" ON public.crm_contacts;
 DROP POLICY IF EXISTS "Org members can view deals" ON public.deals;
 DROP POLICY IF EXISTS "Org members can manage deals" ON public.deals;
 DROP POLICY IF EXISTS "Org members can view messages" ON public.messages;
@@ -445,7 +446,9 @@ CREATE POLICY "Comment owners can delete" ON public.comments FOR DELETE USING (u
 -- CRM CONTACTS policies
 CREATE POLICY "Org members can view contacts" ON public.crm_contacts FOR SELECT USING (public.is_org_member(organization_id));
 CREATE POLICY "Org members can create contacts" ON public.crm_contacts FOR INSERT WITH CHECK (public.is_org_member(organization_id));
-CREATE POLICY "Org admins can update contacts" ON public.crm_contacts FOR UPDATE USING (public.is_org_admin(organization_id));
+CREATE POLICY "Org admins or assignee can update contacts" ON public.crm_contacts FOR UPDATE USING (
+  public.is_org_admin(organization_id) OR assigned_to = auth.uid()
+);
 CREATE POLICY "Org admins can delete contacts" ON public.crm_contacts FOR DELETE USING (public.is_org_admin(organization_id));
 
 -- DEALS policies

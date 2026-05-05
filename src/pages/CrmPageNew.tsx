@@ -217,10 +217,11 @@ function ContactForm({
   )
 }
 
-function StageColumn({ stage, contacts, isAdmin, onEdit, onDelete }: {
+function StageColumn({ stage, contacts, isAdmin, userId, onEdit, onDelete }: {
   stage: CrmContact['stage']
   contacts: CrmContact[]
   isAdmin: boolean
+  userId?: string | null
   onEdit: (c: CrmContact) => void
   onDelete: (id: string) => void
 }) {
@@ -241,9 +242,12 @@ function StageColumn({ stage, contacts, isAdmin, onEdit, onDelete }: {
               <p className="text-white/10 text-xs mt-1">Drag contacts here</p>
             </div>
           ) : (
-            contacts.map(contact => (
-              <ContactCard key={contact.id} contact={contact} onEdit={onEdit} onDelete={onDelete} isAdmin={isAdmin} />
-            ))
+            contacts.map(contact => {
+              const canDrag = isAdmin || (contact.assigned_to && contact.assigned_to === userId)
+              return (
+                <ContactCard key={contact.id} contact={contact} onEdit={onEdit} onDelete={onDelete} isAdmin={canDrag} />
+              )
+            })
           )}
         </SortableContext>
       </div>
@@ -381,7 +385,11 @@ export function CrmPageNew() {
   const handleUpdate = async (data: Partial<CrmContact>) => {
     if (!editContact) return
     try {
-      await updateContact(editContact.id, data)
+      const { contact: updated, error } = await updateContact(editContact.id, data)
+      if (error) {
+        toast.error(error)
+        return
+      }
       toast.success('Contact updated!')
       setEditContact(null)
       setShowModal(false)
@@ -404,7 +412,8 @@ export function CrmPageNew() {
   const handleDragStart = (event: DragStartEvent) => {
     const contact = event.active.data.current?.contact as CrmContact | undefined
     if (!contact) return
-    if (userRole !== 'admin') return
+    // allow admins or the assigned user to start drag
+    if (!(userRole === 'admin' || contact.assigned_to === user?.id)) return
     setActiveContact(contact)
   }
 
@@ -422,7 +431,11 @@ export function CrmPageNew() {
 
     if (!targetStage || contact.stage === targetStage) return
     try {
-      await updateContact(contact.id, { stage: targetStage })
+      const { contact: updated, error } = await updateContact(contact.id, { stage: targetStage })
+      if (error) {
+        toast.error(error)
+        return
+      }
       toast.success('Contact moved!')
     } catch (error: any) {
       toast.error('Failed to update contact')
@@ -476,6 +489,7 @@ export function CrmPageNew() {
                   stage={stage}
                   contacts={stageCts}
                   isAdmin={userRole === 'admin'}
+                  userId={user?.id}
                   onEdit={(c: CrmContact) => { setEditContact(c); setShowModal(true) }}
                   onDelete={handleDelete}
                 />
