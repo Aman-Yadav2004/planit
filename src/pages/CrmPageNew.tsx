@@ -243,7 +243,7 @@ function StageColumn({ stage, contacts, isAdmin, userId, onEdit, onDelete }: {
             </div>
           ) : (
             contacts.map(contact => {
-              const canDrag = isAdmin || (contact.assigned_to && contact.assigned_to === userId)
+              const canDrag = Boolean(isAdmin) || (contact.assigned_to !== null && contact.assigned_to === userId)
               return (
                 <ContactCard key={contact.id} contact={contact} onEdit={onEdit} onDelete={onDelete} isAdmin={canDrag} />
               )
