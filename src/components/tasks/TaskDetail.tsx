@@ -74,12 +74,16 @@ export function TaskDetail({ task, onClose, boards }: TaskDetailProps) {
 
     // find current user's role in this project/org
     try {
-      const { data: membership } = await supabase
-        .from('memberships')
-        .select('role')
-        .eq('organization_id', project.organization_id)
-        .eq('user_id', user?.id)
-        .maybeSingle()
+      let membership: any = null
+      if (user?.id) {
+        const res = await supabase
+          .from('memberships')
+          .select('role')
+          .eq('organization_id', project.organization_id)
+          .eq('user_id', user.id)
+          .maybeSingle()
+        membership = res.data
+      }
 
       setIsAdmin(membership?.role === 'admin')
     } catch (e) {
